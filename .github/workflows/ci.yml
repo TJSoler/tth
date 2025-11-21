@@ -14,16 +14,28 @@ concurrency:
 
 jobs:
   test:
-    name: Test (Zig ${{ matrix.zig-version }})
-    runs-on: ubuntu-latest
+    name: Test (Zig ${{ matrix.zig-version }} on ${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
       matrix:
         include:
           - zig-version: 0.15.2
             required: true
+            arch: x86_64
+            runner: ubuntu-latest
+          - zig-version: 0.15.2
+            required: true
+            arch: arm64
+            runner: ubuntu-24.04-arm
           - zig-version: master
             required: false
+            arch: x86_64
+            runner: ubuntu-latest
+          - zig-version: master
+            required: false
+            arch: arm64
+            runner: ubuntu-24.04-arm
 
     continue-on-error: ${{ !matrix.required }}
 
