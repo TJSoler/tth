@@ -11,10 +11,10 @@
 const std = @import("std");
 
 /// Tiger hash algorithm implementation
-pub const tiger = @import("tiger.zig");
+const tiger = @import("tiger.zig");
 
 /// Tiger Tree Hash (TTH) using Merkle tree
-pub const merkle = @import("merkle_tree.zig");
+const merkle = @import("merkle_tree.zig");
 
 /// Base32 encoding/decoding (RFC 4648) for TTH hashes
 pub const base32 = @import("base32.zig");

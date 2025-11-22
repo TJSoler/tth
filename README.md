@@ -51,11 +51,26 @@ zig fetch --save https://github.com/tth/tth/archive/refs/heads/main.tar.gz
 
 Note: Using main branch is not recommended for production as it may contain breaking changes.
 
-## Components
+## Public API
 
-- `tiger.zig` - Pure Zig Tiger hash algorithm implementation
-- `merkle_tree.zig` - Tiger Tree Hash using Merkle tree construction
-- `base32.zig` - RFC 4648 Base32 encoding/decoding
+The library exposes a clean, minimal API:
+
+**High-level functions:**
+- `tth.compute(allocator, data)` - Compute TTH from data
+- `tth.computeFromFile(allocator, path)` - Compute TTH from file
+
+**Types:**
+- `tth.Tiger` - Tiger hash for incremental hashing
+- `tth.TigerTree` - Tiger Tree Hash builder
+
+**Constants:**
+- `tth.digest_length` - Tiger hash output size (24 bytes)
+- `tth.block_length` - Tiger hash block size (64 bytes)
+- `tth.BLOCK_SIZE` - THEX leaf block size (1024 bytes)
+
+**Base32 encoding:**
+- `tth.base32.encode(allocator, data)` - Encode to Base32
+- `tth.base32.decode(allocator, data)` - Decode from Base32
 
 ## Usage
 
