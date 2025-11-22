@@ -16,7 +16,7 @@ Add TTH to your project using the Zig package manager. Use a specific version ta
 
 ```bash
 # Fetch a specific version (recommended)
-zig fetch --save https://github.com/tth/tth/archive/refs/tags/v0.1.0.tar.gz
+zig fetch --save https://github.com/tjsoler/tth/archive/refs/tags/v0.1.0.tar.gz
 ```
 
 This will output the correct hash. Add it to your `build.zig.zon`:
@@ -24,7 +24,7 @@ This will output the correct hash. Add it to your `build.zig.zon`:
 ```zig
 .dependencies = .{
     .tth = .{
-        .url = "https://github.com/tth/tth/archive/refs/tags/v0.1.0.tar.gz",
+        .url = "https://github.com/tjsoler/tth/archive/refs/tags/v0.1.0.tar.gz",
         .hash = "1220...", // Use the hash from zig fetch
     },
 },
@@ -46,7 +46,7 @@ exe.root_module.addImport("tth", tth.module("tth"));
 To use the latest development version from main branch:
 
 ```bash
-zig fetch --save https://github.com/tth/tth/archive/refs/heads/main.tar.gz
+zig fetch --save https://github.com/tjsoler/tth/archive/refs/heads/main.tar.gz
 ```
 
 Note: Using main branch is not recommended for production as it may contain breaking changes.
@@ -202,3 +202,7 @@ Test vectors are verified against known DC++ and rhash outputs.
 - [Tiger Hash Specification](https://www.cl.cam.ac.uk/~rja14/Papers/tiger.pdf) by Ross Anderson and Eli Biham
 - [THEX - Tree Hash Exchange](http://adc.sourceforge.net/draft-jchapweske-thex-02.html)
 - [RFC 4648 - Base32 Encoding](https://tools.ietf.org/html/rfc4648)
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
