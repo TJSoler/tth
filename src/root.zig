@@ -10,6 +10,9 @@
 
 const std = @import("std");
 
+/// TTH library version
+pub const version = "0.1.0";
+
 /// Tiger hash algorithm implementation
 const tiger = @import("tiger.zig");
 
@@ -30,28 +33,28 @@ pub const digest_length = tiger.digest_length;
 pub const block_length = tiger.block_length;
 
 /// THEX standard leaf block size for Tiger Tree Hash (1024 bytes)
-pub const BLOCK_SIZE = merkle.BLOCK_SIZE;
+pub const leaf_block_size = merkle.leaf_block_size;
 
 /// Compute Tiger Tree Hash for given data
-/// Returns the root hash as a 24-byte array
 pub fn compute(allocator: std.mem.Allocator, data: []const u8) ![24]u8 {
-    var tree = TigerTree.init(allocator);
+    var tree = TigerTree.init(allocator, .{});
     defer tree.deinit();
 
     try tree.update(data);
-    return try tree.finalize();
+    var hash: [24]u8 = undefined;
+    try tree.final(&hash);
+    return hash;
 }
 
 /// Compute Tiger Tree Hash for a file
-/// Returns the root hash as a 24-byte array
 pub fn computeFromFile(allocator: std.mem.Allocator, file_path: []const u8) ![24]u8 {
     const file = try std.fs.cwd().openFile(file_path, .{});
     defer file.close();
 
-    var tree = TigerTree.init(allocator);
+    var tree = TigerTree.init(allocator, .{});
     defer tree.deinit();
 
-    const buffer_size = 64 * 1024; // 64KB buffer
+    const buffer_size = 64 * 1024;
     var buffer = try allocator.alloc(u8, buffer_size);
     defer allocator.free(buffer);
 
@@ -61,7 +64,9 @@ pub fn computeFromFile(allocator: std.mem.Allocator, file_path: []const u8) ![24
         try tree.update(buffer[0..bytes_read]);
     }
 
-    return try tree.finalize();
+    var hash: [24]u8 = undefined;
+    try tree.final(&hash);
+    return hash;
 }
 
 test {
