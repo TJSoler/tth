@@ -35,7 +35,7 @@ pub const block_length = tiger.block_length;
 /// THEX standard leaf block size for Tiger Tree Hash (1024 bytes)
 pub const leaf_block_size = merkle.leaf_block_size;
 
-/// Compute Tiger Tree Hash for given data
+/// Compute Tiger Tree Hash for given data. Returns 24-byte hash.
 pub fn compute(allocator: std.mem.Allocator, data: []const u8) ![24]u8 {
     var tree = TigerTree.init(allocator, .{});
     defer tree.deinit();
@@ -46,7 +46,7 @@ pub fn compute(allocator: std.mem.Allocator, data: []const u8) ![24]u8 {
     return hash;
 }
 
-/// Compute Tiger Tree Hash for a file
+/// Compute Tiger Tree Hash for a file. Returns 24-byte hash.
 pub fn computeFromFile(allocator: std.mem.Allocator, file_path: []const u8) ![24]u8 {
     const file = try std.fs.cwd().openFile(file_path, .{});
     defer file.close();
