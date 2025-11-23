@@ -97,12 +97,12 @@ jobs:
             # Run main branch
             echo "Running main branch..."
             cd main-branch
-            zig run -O ReleaseFast benchmark.zig -- --output json > ../main_${i}.json
+            zig run -O ReleaseFast benchmark.zig -- --output json 2> ../main_${i}.json
             cd ..
 
             # Run PR branch
             echo "Running PR branch..."
-            zig run -O ReleaseFast benchmark.zig -- --output json > pr_${i}.json
+            zig run -O ReleaseFast benchmark.zig -- --output json 2> pr_${i}.json
           done
 
           echo "All benchmark runs complete."
