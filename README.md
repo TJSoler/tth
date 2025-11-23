@@ -66,7 +66,7 @@ The library exposes a clean, minimal API:
 **Constants:**
 - `tth.digest_length` - Tiger hash output size (24 bytes)
 - `tth.block_length` - Tiger hash block size (64 bytes)
-- `tth.BLOCK_SIZE` - THEX leaf block size (1024 bytes)
+- `tth.leaf_block_size` - THEX leaf block size (1024 bytes)
 
 **Base32 encoding:**
 - `tth.base32.encode(allocator, data)` - Encode to Base32
@@ -125,7 +125,7 @@ std.debug.print("TTH: {s}\n", .{encoded});
 For more control, use the `TigerTree` directly:
 
 ```zig
-var tree = tth.TigerTree.init(allocator);
+var tree = tth.TigerTree.init(allocator, .{});
 defer tree.deinit();
 
 // Update with data chunks
@@ -133,13 +133,14 @@ try tree.update(chunk1);
 try tree.update(chunk2);
 
 // Get final hash
-const hash = try tree.finalize();
+var hash: [24]u8 = undefined;
+try tree.final(&hash);
 ```
 
 ### Using Tiger Hash Directly
 
 ```zig
-var h = tth.Tiger.init();
+var h = tth.Tiger.init(.{});
 h.update("some data");
 
 var digest: [24]u8 = undefined;

@@ -3,6 +3,15 @@
 //! Tiger is a cryptographic hash function designed for 64-bit platforms,
 //! producing a 192-bit (24-byte) hash value. Used in DC++ for Tiger Tree Hash.
 //!
+//! **SECURITY WARNING**: The Tiger hash function is not considered cryptographically
+//! secure for modern applications. It should not be used for digital signatures,
+//! password hashing, or other security-critical purposes where collision resistance
+//! against targeted attacks is required.
+//!
+//! Tiger is suitable for file integrity checking in peer-to-peer applications
+//! (e.g., DC++, TTH) where performance is important and cryptographic security
+//! against sophisticated attackers is not a primary concern.
+//!
 //! Based on the Tiger hash specification by Ross Anderson and Eli Biham.
 //! Reference: https://www.cl.cam.ac.uk/~rja14/Papers/tiger.pdf
 
@@ -287,44 +296,64 @@ const t4: [256]u64 = .{
 pub const Tiger = struct {
     const Self = @This();
 
-    state: [3]u64,
-    buf: [64]u8,
-    buf_len: usize,
+    /// Initialization options (empty for now, for future extensibility)
+    pub const Options = struct {};
+
+    state: [3]u64 align(16),
+    buf: [64]u8 = undefined,
+    buf_len: u8,
     total_len: u64,
 
-    /// Initialize Tiger hash
-    pub fn init() Self {
+    pub fn init(options: Options) Self {
+        _ = options;
         return .{
             .state = .{
                 0x0123456789ABCDEF,
                 0xFEDCBA9876543210,
                 0xF096A5B4C3B2E187,
             },
-            .buf = undefined,
             .buf_len = 0,
             .total_len = 0,
         };
     }
 
+    /// One-shot hash computation
+    pub fn hash(b: []const u8, out: *[digest_length]u8, options: Options) void {
+        var d = Self.init(options);
+        d.update(b);
+        d.final(out);
+    }
+
+    /// Non-destructive hash read (copies state before finalizing)
+    pub fn peek(self: Self) [digest_length]u8 {
+        var copy = self;
+        var out: [digest_length]u8 = undefined;
+        copy.final(&out);
+        return out;
+    }
+
     /// Update with data
-    pub fn update(self: *Self, data: []const u8) void {
-        var remaining = data;
+    pub fn update(self: *Self, b: []const u8) void {
+        var off: usize = 0;
 
-        while (remaining.len > 0) {
-            const space = block_length - self.buf_len;
-            const to_copy = @min(space, remaining.len);
-
-            @memcpy(self.buf[self.buf_len..][0..to_copy], remaining[0..to_copy]);
-            self.buf_len += to_copy;
-            remaining = remaining[to_copy..];
-
-            if (self.buf_len == block_length) {
-                self.compress(&self.buf);
-                self.buf_len = 0;
-            }
+        // Handle partial buffer from previous update
+        if (self.buf_len != 0 and self.buf_len + b.len >= block_length) {
+            off += block_length - self.buf_len;
+            @memcpy(self.buf[self.buf_len..][0..off], b[0..off]);
+            self.compress(&self.buf);
+            self.buf_len = 0;
         }
 
-        self.total_len += data.len;
+        // Process full middle blocks
+        while (off + block_length <= b.len) : (off += block_length) {
+            self.compress(b[off..][0..block_length]);
+        }
+
+        // Copy remainder to buffer
+        const remaining = b[off..];
+        @memcpy(self.buf[self.buf_len..][0..remaining.len], remaining);
+        self.buf_len += @intCast(remaining.len);
+        self.total_len += b.len;
     }
 
     /// Finalize and write result
@@ -340,20 +369,33 @@ pub const Tiger = struct {
             self.buf_len = 0;
         }
 
-        // Pad with zeros
         @memset(self.buf[self.buf_len..56], 0);
 
         // Append length in bits (little-endian)
         const bit_len = self.total_len * 8;
         std.mem.writeInt(u64, self.buf[56..64], bit_len, .little);
 
-        // Process final block
         self.compress(&self.buf);
 
         // Write output in little-endian format
         std.mem.writeInt(u64, out[0..8], self.state[0], .little);
         std.mem.writeInt(u64, out[8..16], self.state[1], .little);
         std.mem.writeInt(u64, out[16..24], self.state[2], .little);
+    }
+
+    /// Writer error type (never fails)
+    pub const Error = error{};
+
+    /// Writer type for std.io integration
+    pub const Writer = std.io.GenericWriter(*Self, Error, write);
+
+    fn write(self: *Self, bytes: []const u8) Error!usize {
+        self.update(bytes);
+        return bytes.len;
+    }
+
+    pub fn writer(self: *Self) Writer {
+        return .{ .context = self };
     }
 
     /// Compress a 512-bit block into the hash state
@@ -380,7 +422,6 @@ pub const Tiger = struct {
         round(&a, &b, &c, x[6], 5);
         round(&b, &c, &a, x[7], 5);
 
-        // Key schedule for pass 2
         keySchedule(&x);
 
         // Pass 2: starts with (c, a, b) - variables rotated
@@ -393,7 +434,6 @@ pub const Tiger = struct {
         round(&c, &a, &b, x[6], 7);
         round(&a, &b, &c, x[7], 7);
 
-        // Key schedule for pass 3
         keySchedule(&x);
 
         // Pass 3: starts with (b, c, a) - variables rotated again
@@ -412,7 +452,6 @@ pub const Tiger = struct {
         self.state[2] +%= c;
     }
 
-    /// Tiger round function
     fn round(a: *u64, b: *u64, c: *u64, x: u64, mul: u64) void {
         c.* ^= x;
         a.* -%= t1[@as(u8, @truncate(c.*))] ^ t2[@as(u8, @truncate(c.* >> 16))] ^ t3[@as(u8, @truncate(c.* >> 32))] ^ t4[@as(u8, @truncate(c.* >> 48))];
@@ -420,7 +459,6 @@ pub const Tiger = struct {
         b.* *%= mul;
     }
 
-    /// Key schedule function
     fn keySchedule(x: *[8]u64) void {
         x[0] -%= x[7] ^ 0xA5A5A5A5A5A5A5A5;
         x[1] ^= x[0];
@@ -444,7 +482,7 @@ pub const Tiger = struct {
 const testing = std.testing;
 
 test "tiger - empty string" {
-    var h = Tiger.init();
+    var h = Tiger.init(.{});
     var out: [24]u8 = undefined;
     h.final(&out);
 
@@ -458,7 +496,7 @@ test "tiger - empty string" {
 }
 
 test "tiger - abc" {
-    var h = Tiger.init();
+    var h = Tiger.init(.{});
     h.update("abc");
     var out: [24]u8 = undefined;
     h.final(&out);
