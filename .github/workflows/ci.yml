@@ -68,3 +68,48 @@ jobs:
 
       - name: Check formatting
         run: zig fmt --check .
+
+  benchmark:
+    name: Performance Regression Check
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - name: Checkout PR branch
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Setup Zig
+        uses: mlugg/setup-zig@8d6198c65fb0feaa111df26e6b467fea8345e46f # v2
+        with:
+          version: 0.15.2
+
+      - name: Checkout main branch
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          ref: main
+          path: main-branch
+
+      - name: Run interleaved benchmarks (5 iterations each)
+        run: |
+          echo "Running 5 interleaved benchmark iterations..."
+          for i in 1 2 3 4 5; do
+            echo "=== Iteration $i ==="
+
+            # Run main branch
+            echo "Running main branch..."
+            cd main-branch
+            zig run -O ReleaseFast benchmark.zig -- --output json > ../main_${i}.json
+            cd ..
+
+            # Run PR branch
+            echo "Running PR branch..."
+            zig run -O ReleaseFast benchmark.zig -- --output json > pr_${i}.json
+          done
+
+          echo "All benchmark runs complete."
+
+      - name: Compare benchmarks
+        run: |
+          zig run scripts/compare_benchmarks.zig -- \
+            --main main_1.json main_2.json main_3.json main_4.json main_5.json \
+            --pr pr_1.json pr_2.json pr_3.json pr_4.json pr_5.json \
+            --threshold 10.0
