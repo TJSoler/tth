@@ -509,3 +509,224 @@ test "tiger - abc" {
 
     try testing.expectEqualSlices(u8, &expected, &out);
 }
+
+test "tiger - streaming incremental updates" {
+    var h1 = Tiger.init(.{});
+    h1.update("a");
+    h1.update("b");
+    h1.update("c");
+    var out1: [24]u8 = undefined;
+    h1.final(&out1);
+
+    var h2 = Tiger.init(.{});
+    h2.update("abc");
+    var out2: [24]u8 = undefined;
+    h2.final(&out2);
+
+    try testing.expectEqualSlices(u8, &out1, &out2);
+}
+
+test "tiger - multi-block (>64 bytes)" {
+    var h = Tiger.init(.{});
+    const data = "a" ** 100;
+    h.update(data);
+    var out: [24]u8 = undefined;
+    h.final(&out);
+
+    const expected = [_]u8{
+        0x59, 0x77, 0xac, 0x6d, 0xf7, 0xb1, 0x99, 0x42,
+        0x95, 0xc8, 0x44, 0xab, 0xae, 0x7d, 0x87, 0xd4,
+        0x9b, 0xeb, 0xd9, 0x4b, 0xfa, 0xdc, 0xcb, 0x87,
+    };
+
+    try testing.expectEqualSlices(u8, &expected, &out);
+}
+
+test "tiger - exactly one block (64 bytes)" {
+    var h = Tiger.init(.{});
+    const data = [_]u8{0x61} ** 64;
+    h.update(&data);
+    var out: [24]u8 = undefined;
+    h.final(&out);
+
+    const expected = [_]u8{
+        0x75, 0x03, 0xf3, 0x13, 0xbb, 0xea, 0x92, 0xed,
+        0xdc, 0xa9, 0x0c, 0x5d, 0x3f, 0xcc, 0x43, 0x68,
+        0x23, 0x74, 0x57, 0xdf, 0x36, 0x6f, 0xb7, 0x6e,
+    };
+
+    try testing.expectEqualSlices(u8, &expected, &out);
+}
+
+test "tiger - exactly two blocks (128 bytes)" {
+    var h = Tiger.init(.{});
+    const data = [_]u8{0x61} ** 128;
+    h.update(&data);
+    var out: [24]u8 = undefined;
+    h.final(&out);
+
+    const expected = [_]u8{
+        0x8a, 0xf5, 0x3f, 0x73, 0xf7, 0xa1, 0xd6, 0xb7,
+        0x79, 0xd8, 0x41, 0x3b, 0xed, 0x53, 0xb9, 0x35,
+        0x0f, 0xc5, 0x6b, 0xf6, 0x13, 0x8a, 0x39, 0xd8,
+    };
+
+    try testing.expectEqualSlices(u8, &expected, &out);
+}
+
+test "tiger - long message" {
+    var h = Tiger.init(.{});
+    const message = "Tiger - A Fast New Hash Function, by Ross Anderson and Eli Biham";
+    h.update(message);
+    var out: [24]u8 = undefined;
+    h.final(&out);
+
+    const expected = [_]u8{
+        0x8a, 0x86, 0x68, 0x29, 0x04, 0x0a, 0x41, 0x0c,
+        0x72, 0x9a, 0xd2, 0x3f, 0x5a, 0xda, 0x71, 0x16,
+        0x03, 0xb3, 0xcd, 0xd3, 0x57, 0xe4, 0xc1, 0x5e,
+    };
+
+    try testing.expectEqualSlices(u8, &expected, &out);
+}
+
+test "tiger - large streaming data" {
+    var h = Tiger.init(.{});
+
+    var i: usize = 0;
+    while (i < 100) : (i += 1) {
+        h.update("0123456789");
+    }
+
+    var out: [24]u8 = undefined;
+    h.final(&out);
+
+    // Verify we can compute the same hash with a single call
+    var h2 = Tiger.init(.{});
+    const data = "0123456789" ** 100;
+    h2.update(data);
+    var out2: [24]u8 = undefined;
+    h2.final(&out2);
+
+    try testing.expectEqualSlices(u8, &out, &out2);
+}
+
+test "tiger - writer interface" {
+    var h = Tiger.init(.{});
+    const w = h.writer();
+
+    // Write using the Writer interface
+    _ = try w.writeAll("abc");
+
+    var out: [24]u8 = undefined;
+    h.final(&out);
+
+    // Verify same result as direct update
+    var h2 = Tiger.init(.{});
+    h2.update("abc");
+    var out2: [24]u8 = undefined;
+    h2.final(&out2);
+
+    try testing.expectEqualSlices(u8, &out, &out2);
+}
+
+test "tiger - writer interface multiple writes" {
+    var h = Tiger.init(.{});
+    const w = h.writer();
+
+    // Multiple writes
+    _ = try w.writeAll("a");
+    _ = try w.writeAll("b");
+    _ = try w.writeAll("c");
+
+    var out: [24]u8 = undefined;
+    h.final(&out);
+
+    // Verify same result as direct update
+    var h2 = Tiger.init(.{});
+    h2.update("abc");
+    var out2: [24]u8 = undefined;
+    h2.final(&out2);
+
+    try testing.expectEqualSlices(u8, &out, &out2);
+}
+
+test "tiger - one-shot hash" {
+    var out: [24]u8 = undefined;
+    Tiger.hash("abc", &out, .{});
+
+    // Verify same result as streaming
+    var h = Tiger.init(.{});
+    h.update("abc");
+    var out2: [24]u8 = undefined;
+    h.final(&out2);
+
+    try testing.expectEqualSlices(u8, &out, &out2);
+}
+
+test "tiger - one-shot hash empty" {
+    var out: [24]u8 = undefined;
+    Tiger.hash("", &out, .{});
+
+    const expected = [_]u8{
+        0x32, 0x93, 0xac, 0x63, 0x0c, 0x13, 0xf0, 0x24,
+        0x5f, 0x92, 0xbb, 0xb1, 0x76, 0x6e, 0x16, 0x16,
+        0x7a, 0x4e, 0x58, 0x49, 0x2d, 0xde, 0x73, 0xf3,
+    };
+
+    try testing.expectEqualSlices(u8, &expected, &out);
+}
+
+test "tiger - peek non-destructive" {
+    var h = Tiger.init(.{});
+    h.update("abc");
+
+    // Peek should not consume the state
+    const peeked = h.peek();
+
+    // Should still be able to update and finalize
+    h.update("def");
+    var out: [24]u8 = undefined;
+    h.final(&out);
+
+    // Peeked value should be hash of "abc"
+    var h2 = Tiger.init(.{});
+    h2.update("abc");
+    const expected = h2.peek();
+
+    try testing.expectEqualSlices(u8, &peeked, &expected);
+
+    // Final value should be hash of "abcdef"
+    var h3 = Tiger.init(.{});
+    h3.update("abcdef");
+    var expected2: [24]u8 = undefined;
+    h3.final(&expected2);
+
+    try testing.expectEqualSlices(u8, &out, &expected2);
+}
+
+test "tiger - comptime hash" {
+    comptime {
+        var h = Tiger.init(.{});
+        h.update("abc");
+        var out: [digest_length]u8 = undefined;
+        h.final(&out);
+
+        // Verify we can compute hash at comptime
+        if (out[0] != 0x2a or out[1] != 0xab) {
+            @compileError("Comptime Tiger hash failed");
+        }
+    }
+}
+
+test "tiger - comptime one-shot" {
+    comptime {
+        var out: [digest_length]u8 = undefined;
+        Tiger.hash("test", &out, .{});
+
+        // Verify hash was computed (check first byte is non-zero)
+        if (out[0] == 0) {
+            @compileError("Comptime one-shot hash failed");
+        }
+    }
+}

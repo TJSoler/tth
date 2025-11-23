@@ -134,3 +134,123 @@ test "base32 - invalid character" {
     const result = decode(testing.allocator, invalid);
     try testing.expectError(error.InvalidBase32Character, result);
 }
+
+test "base32 - RFC 4648 test vectors" {
+    // Test vectors from RFC 4648
+    const test_cases = [_]struct {
+        input: []const u8,
+        expected: []const u8,
+    }{
+        .{ .input = "f", .expected = "MY" },
+        .{ .input = "fo", .expected = "MZXQ" },
+        .{ .input = "foo", .expected = "MZXW6" },
+        .{ .input = "foob", .expected = "MZXW6YQ" },
+        .{ .input = "fooba", .expected = "MZXW6YTB" },
+        .{ .input = "foobar", .expected = "MZXW6YTBOI" },
+    };
+
+    for (test_cases) |case| {
+        const encoded = try encode(testing.allocator, case.input);
+        defer testing.allocator.free(encoded);
+        try testing.expectEqualStrings(case.expected, encoded);
+
+        const decoded = try decode(testing.allocator, encoded);
+        defer testing.allocator.free(decoded);
+        try testing.expectEqualSlices(u8, case.input, decoded);
+    }
+}
+
+test "base32 - single byte encoding" {
+    const data = [_]u8{0xFF};
+    const encoded = try encode(testing.allocator, &data);
+    defer testing.allocator.free(encoded);
+
+    try testing.expect(encoded.len == 2);
+
+    const decoded = try decode(testing.allocator, encoded);
+    defer testing.allocator.free(decoded);
+    try testing.expectEqualSlices(u8, &data, decoded);
+}
+
+test "base32 - 5 bytes encoding (clean multiple)" {
+    const data = [_]u8{ 0x12, 0x34, 0x56, 0x78, 0x9A };
+    const encoded = try encode(testing.allocator, &data);
+    defer testing.allocator.free(encoded);
+
+    // 5 bytes -> 8 characters
+    try testing.expectEqual(@as(usize, 8), encoded.len);
+
+    const decoded = try decode(testing.allocator, encoded);
+    defer testing.allocator.free(decoded);
+    try testing.expectEqualSlices(u8, &data, decoded);
+}
+
+test "base32 - 100 bytes encoding" {
+    const data = [_]u8{0xAB} ** 100;
+    const encoded = try encode(testing.allocator, &data);
+    defer testing.allocator.free(encoded);
+
+    // 100 bytes -> 160 characters
+    try testing.expectEqual(@as(usize, 160), encoded.len);
+
+    const decoded = try decode(testing.allocator, encoded);
+    defer testing.allocator.free(decoded);
+    try testing.expectEqualSlices(u8, &data, decoded);
+}
+
+test "base32 - all zeros" {
+    const data = [_]u8{0} ** 24;
+    const encoded = try encode(testing.allocator, &data);
+    defer testing.allocator.free(encoded);
+
+    // All zeros should encode to all 'A's
+    for (encoded) |c| {
+        try testing.expectEqual(@as(u8, 'A'), c);
+    }
+
+    const decoded = try decode(testing.allocator, encoded);
+    defer testing.allocator.free(decoded);
+    try testing.expectEqualSlices(u8, &data, decoded);
+}
+
+test "base32 - all ones" {
+    const data = [_]u8{0xFF} ** 24;
+    const encoded = try encode(testing.allocator, &data);
+    defer testing.allocator.free(encoded);
+
+    try testing.expectEqual(@as(usize, 39), encoded.len);
+
+    const decoded = try decode(testing.allocator, encoded);
+    defer testing.allocator.free(decoded);
+    try testing.expectEqualSlices(u8, &data, decoded);
+}
+
+test "base32 - alphabet coverage" {
+    // Ensure all characters in alphabet are valid
+    const alphabet_str = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+    const decoded = try decode(testing.allocator, alphabet_str);
+    defer testing.allocator.free(decoded);
+
+    const re_encoded = try encode(testing.allocator, decoded);
+    defer testing.allocator.free(re_encoded);
+
+    try testing.expectEqualStrings(alphabet_str, re_encoded);
+}
+
+test "base32 - decode invalid lowercase" {
+    // Our implementation should reject lowercase
+    const lowercase = "abc";
+    const result = decode(testing.allocator, lowercase);
+    try testing.expectError(error.InvalidBase32Character, result);
+}
+
+test "base32 - empty round-trip" {
+    const empty = [_]u8{};
+    const encoded = try encode(testing.allocator, &empty);
+    defer testing.allocator.free(encoded);
+    try testing.expectEqual(@as(usize, 0), encoded.len);
+
+    const decoded = try decode(testing.allocator, encoded);
+    defer testing.allocator.free(decoded);
+    try testing.expectEqual(@as(usize, 0), decoded.len);
+}
