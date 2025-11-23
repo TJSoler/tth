@@ -1,16 +1,16 @@
 //! tiger.zig - Pure Zig implementation of Tiger hash algorithm
 //!
 //! Tiger is a cryptographic hash function designed for 64-bit platforms,
-//! producing a 192-bit (24-byte) hash value. Used in DC++ for Tiger Tree Hash.
+//! producing a 192-bit (24-byte) hash value.
 //!
-//! **SECURITY WARNING**: The Tiger hash function is not considered cryptographically
-//! secure for modern applications. It should not be used for digital signatures,
-//! password hashing, or other security-critical purposes where collision resistance
-//! against targeted attacks is required.
+//! **SECURITY WARNING**: The Tiger hash function is not considered
+//! cryptographically secure for modern applications. It should not be used
+//! for digital signatures, password hashing, or other security-critical
+//! purposes where collision resistance against targeted attacks is required.
 //!
-//! Tiger is suitable for file integrity checking in peer-to-peer applications
-//! (e.g., DC++, TTH) where performance is important and cryptographic security
-//! against sophisticated attackers is not a primary concern.
+//! Tiger is suitable for file integrity checking where performance is
+//! important and cryptographic security against sophisticated attackers
+//! is not a primary concern.
 //!
 //! Based on the Tiger hash specification by Ross Anderson and Eli Biham.
 //! Reference: https://www.cl.cam.ac.uk/~rja14/Papers/tiger.pdf
