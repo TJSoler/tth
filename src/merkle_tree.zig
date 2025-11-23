@@ -1,13 +1,13 @@
 //! merkle_tree.zig - Merkle tree for Tiger Tree Hash (TTH)
 //!
-//! Based on THEX specification and EiskaltDC++ implementation.
+//! Based on THEX specification.
 //! Uses incremental tree building with 1024-byte leaf blocks.
 //!
-//! **SECURITY WARNING**: Tiger Tree Hash inherits the security properties of
-//! the underlying Tiger hash function. It is not considered cryptographically
-//! secure for modern security-critical applications. Use only for file integrity
-//! checking in peer-to-peer contexts where cryptographic security against
-//! sophisticated attackers is not required.
+//! **SECURITY WARNING**: Tiger Tree Hash inherits the security properties
+//! of the underlying Tiger hash function. It is not considered
+//! cryptographically secure for modern security-critical applications.
+//! Use only for file integrity checking in contexts where cryptographic
+//! security against sophisticated attackers is not required.
 //!
 //! **MEMORY MANAGEMENT**: TigerTree requires dynamic memory allocation for the
 //! tree structure. You must call `deinit()` when done to avoid memory leaks.

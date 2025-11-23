@@ -1,6 +1,6 @@
 # TTH (Tiger Tree Hash) Library
 
-A pure Zig implementation of Tiger Tree Hash (TTH), commonly used in peer-to-peer file sharing protocols like DC++.
+A pure Zig implementation of Tiger Tree Hash (TTH)
 
 ## Features
 
@@ -180,15 +180,6 @@ For optimized performance testing:
 zig build test -Doptimize=ReleaseFast
 ```
 
-## Compatibility
-
-The implementation is compatible with:
-- DC++ TTH hashes
-- rhash TTH output
-- EiskaltDC++ implementation
-- Any tool following the THEX specification
-
-Test vectors are verified against known DC++ and rhash outputs.
 
 ## Technical Details
 
