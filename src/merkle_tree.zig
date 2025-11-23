@@ -133,22 +133,6 @@ pub const TigerTree = struct {
         return copy;
     }
 
-    /// Writer error type (can fail due to allocation)
-    pub const Error = std.mem.Allocator.Error;
-
-    /// Writer type for std.io integration
-    pub const Writer = std.io.GenericWriter(*Self, Error, write);
-
-    fn write(self: *Self, bytes: []const u8) Error!usize {
-        try self.update(bytes);
-        return bytes.len;
-    }
-
-    /// Return a Writer interface for std.io integration
-    pub fn writer(self: *Self) Writer {
-        return .{ .context = self };
-    }
-
     /// Process a complete block (leaf hash)
     fn processBlock(self: *Self, data: []const u8) !void {
         var leaf_hash: [hash_size]u8 = undefined;
@@ -381,47 +365,6 @@ test "tiger tree - 10000 bytes (varied size)" {
     try tt.final(&root);
 
     try testing.expect(root.len == 24);
-}
-
-test "tiger tree - writer interface" {
-    var tt = TigerTree.init(testing.allocator, .{});
-    defer tt.deinit();
-
-    const w = tt.writer();
-    _ = try w.writeAll("test data");
-
-    var root: [hash_size]u8 = undefined;
-    try tt.final(&root);
-
-    // Verify same result as direct update
-    var tt2 = TigerTree.init(testing.allocator, .{});
-    defer tt2.deinit();
-    try tt2.update("test data");
-    var root2: [hash_size]u8 = undefined;
-    try tt2.final(&root2);
-
-    try testing.expectEqualSlices(u8, &root, &root2);
-}
-
-test "tiger tree - writer interface multiple writes" {
-    var tt = TigerTree.init(testing.allocator, .{});
-    defer tt.deinit();
-
-    const w = tt.writer();
-    _ = try w.writeAll("test ");
-    _ = try w.writeAll("data");
-
-    var root: [hash_size]u8 = undefined;
-    try tt.final(&root);
-
-    // Verify same result as direct update
-    var tt2 = TigerTree.init(testing.allocator, .{});
-    defer tt2.deinit();
-    try tt2.update("test data");
-    var root2: [hash_size]u8 = undefined;
-    try tt2.final(&root2);
-
-    try testing.expectEqualSlices(u8, &root, &root2);
 }
 
 test "tiger tree - one-shot hash" {

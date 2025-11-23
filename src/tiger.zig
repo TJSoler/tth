@@ -384,22 +384,6 @@ pub const Tiger = struct {
         std.mem.writeInt(u64, out[16..24], self.state[2], .little);
     }
 
-    /// Writer error type (never fails)
-    pub const Error = error{};
-
-    /// Writer type for std.io integration
-    pub const Writer = std.io.GenericWriter(*Self, Error, write);
-
-    fn write(self: *Self, bytes: []const u8) Error!usize {
-        self.update(bytes);
-        return bytes.len;
-    }
-
-    /// Return a Writer interface for std.io integration
-    pub fn writer(self: *Self) Writer {
-        return .{ .context = self };
-    }
-
     /// Compress a 512-bit block into the hash state
     fn compress(self: *Self, block: *const [64]u8) void {
         // Load block into 8 64-bit words (little-endian)
@@ -607,46 +591,6 @@ test "tiger - large streaming data" {
     var h2 = Tiger.init(.{});
     const data = "0123456789" ** 100;
     h2.update(data);
-    var out2: [24]u8 = undefined;
-    h2.final(&out2);
-
-    try testing.expectEqualSlices(u8, &out, &out2);
-}
-
-test "tiger - writer interface" {
-    var h = Tiger.init(.{});
-    const w = h.writer();
-
-    // Write using the Writer interface
-    _ = try w.writeAll("abc");
-
-    var out: [24]u8 = undefined;
-    h.final(&out);
-
-    // Verify same result as direct update
-    var h2 = Tiger.init(.{});
-    h2.update("abc");
-    var out2: [24]u8 = undefined;
-    h2.final(&out2);
-
-    try testing.expectEqualSlices(u8, &out, &out2);
-}
-
-test "tiger - writer interface multiple writes" {
-    var h = Tiger.init(.{});
-    const w = h.writer();
-
-    // Multiple writes
-    _ = try w.writeAll("a");
-    _ = try w.writeAll("b");
-    _ = try w.writeAll("c");
-
-    var out: [24]u8 = undefined;
-    h.final(&out);
-
-    // Verify same result as direct update
-    var h2 = Tiger.init(.{});
-    h2.update("abc");
     var out2: [24]u8 = undefined;
     h2.final(&out2);
 
