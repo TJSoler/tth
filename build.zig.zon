@@ -1,6 +1,7 @@
 .{
     .name = .tth,
     .version = "0.1.0",
+    .license = "MIT",
     .fingerprint = 0xa4834c0673ea1e12, // Changing this has security and trust implications.
     .minimum_zig_version = "0.15.2",
     .dependencies = .{},
@@ -9,5 +10,6 @@
         "build.zig.zon",
         "src",
         "README.md",
+        "LICENSE",
     },
 }
