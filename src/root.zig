@@ -72,3 +72,138 @@ pub fn computeFromFile(allocator: std.mem.Allocator, file_path: []const u8) ![24
 test {
     std.testing.refAllDecls(@This());
 }
+
+const testing = std.testing;
+
+test "public API - compute empty data" {
+    const hash = try compute(testing.allocator, "");
+    const encoded = try base32.encode(testing.allocator, &hash);
+    defer testing.allocator.free(encoded);
+
+    try testing.expectEqualStrings("LWPNACQDBZRYXW3VHJVCJ64QBZNGHOHHHZWCLNQ", encoded);
+}
+
+test "public API - compute simple data" {
+    const data = "Hello, World!";
+    const hash = try compute(testing.allocator, data);
+
+    try testing.expect(hash.len == digest_length);
+    try testing.expect(hash.len == 24);
+}
+
+test "public API - compute large data" {
+    const data = [_]u8{0xAB} ** 10000;
+    const hash = try compute(testing.allocator, &data);
+
+    try testing.expect(hash.len == digest_length);
+}
+
+test "public API - compute consistency" {
+    const data = "Test data for consistency check";
+    const hash1 = try compute(testing.allocator, data);
+    const hash2 = try compute(testing.allocator, data);
+
+    try testing.expectEqualSlices(u8, &hash1, &hash2);
+}
+
+test "public API - computeFromFile with temp file" {
+    // Create a temporary file
+    const test_data = "This is test data for file hashing";
+    const temp_file_path = "test_temp_file.txt";
+
+    const file = try std.fs.cwd().createFile(temp_file_path, .{});
+    defer {
+        file.close();
+        std.fs.cwd().deleteFile(temp_file_path) catch {};
+    }
+
+    try file.writeAll(test_data);
+    try file.sync();
+
+    // Compute hash from file
+    const hash_from_file = try computeFromFile(testing.allocator, temp_file_path);
+
+    // Compute hash from data directly
+    const hash_from_data = try compute(testing.allocator, test_data);
+
+    try testing.expectEqualSlices(u8, &hash_from_file, &hash_from_data);
+}
+
+test "public API - computeFromFile empty file" {
+    const temp_file_path = "test_empty_file.txt";
+
+    const file = try std.fs.cwd().createFile(temp_file_path, .{});
+    defer {
+        file.close();
+        std.fs.cwd().deleteFile(temp_file_path) catch {};
+    }
+
+    const hash = try computeFromFile(testing.allocator, temp_file_path);
+    const encoded = try base32.encode(testing.allocator, &hash);
+    defer testing.allocator.free(encoded);
+
+    try testing.expectEqualStrings("LWPNACQDBZRYXW3VHJVCJ64QBZNGHOHHHZWCLNQ", encoded);
+}
+
+test "public API - computeFromFile large file" {
+    const temp_file_path = "test_large_file.bin";
+
+    const file = try std.fs.cwd().createFile(temp_file_path, .{});
+    defer {
+        file.close();
+        std.fs.cwd().deleteFile(temp_file_path) catch {};
+    }
+
+    // Write 100KB of data
+    const chunk = [_]u8{0x42} ** 1024;
+    var i: usize = 0;
+    while (i < 100) : (i += 1) {
+        try file.writeAll(&chunk);
+    }
+    try file.sync();
+
+    const hash = try computeFromFile(testing.allocator, temp_file_path);
+
+    try testing.expect(hash.len == digest_length);
+}
+
+test "public API - error on non-existent file" {
+    const result = computeFromFile(testing.allocator, "non_existent_file_xyz.txt");
+    try testing.expectError(error.FileNotFound, result);
+}
+
+test "public API - Tiger direct usage" {
+    var h = Tiger.init(.{});
+    h.update("test");
+    var digest: [digest_length]u8 = undefined;
+    h.final(&digest);
+
+    try testing.expect(digest.len == digest_length);
+}
+
+test "public API - TigerTree direct usage" {
+    var tree = TigerTree.init(testing.allocator, .{});
+    defer tree.deinit();
+
+    try tree.update("test data");
+    var hash: [24]u8 = undefined;
+    try tree.final(&hash);
+
+    try testing.expect(hash.len == digest_length);
+}
+
+test "public API - full integration with base32" {
+    const data = "Integration test data";
+    const hash = try compute(testing.allocator, data);
+    const encoded = try base32.encode(testing.allocator, &hash);
+    defer testing.allocator.free(encoded);
+
+    // Verify encoded length
+    try testing.expectEqual(@as(usize, 39), encoded.len);
+
+    // Decode and verify round-trip
+    const decoded = try base32.decode(testing.allocator, encoded);
+    defer testing.allocator.free(decoded);
+
+    try testing.expectEqualSlices(u8, &hash, decoded);
+}

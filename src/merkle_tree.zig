@@ -240,3 +240,237 @@ test "tiger tree - 1025 A's" {
 
     try testing.expectEqualStrings("PZMRYHGY6LTBEH63ZWAHDORHSYTLO4LEFUIKHWY", encoded);
 }
+
+test "tiger tree - streaming incremental updates" {
+    var tt1 = TigerTree.init(testing.allocator, .{});
+    defer tt1.deinit();
+    var tt2 = TigerTree.init(testing.allocator, .{});
+    defer tt2.deinit();
+
+    // One call
+    const data = "test data for streaming";
+    try tt1.update(data);
+
+    // Multiple calls
+    try tt2.update("test ");
+    try tt2.update("data ");
+    try tt2.update("for ");
+    try tt2.update("streaming");
+
+    var root1: [HASH_SIZE]u8 = undefined;
+    var root2: [HASH_SIZE]u8 = undefined;
+    try tt1.final(&root1);
+    try tt2.final(&root2);
+
+    try testing.expectEqualSlices(u8, &root1, &root2);
+}
+
+test "tiger tree - 2048 bytes (exactly 2 blocks)" {
+    var tt = TigerTree.init(testing.allocator, .{});
+    defer tt.deinit();
+
+    const data = [_]u8{0x42} ** 2048;
+    try tt.update(&data);
+
+    var root: [HASH_SIZE]u8 = undefined;
+    try tt.final(&root);
+    const encoded = try base32.encode(testing.allocator, &root);
+    defer testing.allocator.free(encoded);
+
+    try testing.expectEqualStrings("4GIQEVNYCTEFRJLADAPEDVUDKZQUIE2A6BKOJQI", encoded);
+}
+
+test "tiger tree - 2049 bytes (3 blocks, triggers internal node)" {
+    var tt = TigerTree.init(testing.allocator, .{});
+    defer tt.deinit();
+
+    const data = [_]u8{0x42} ** 2049;
+    try tt.update(&data);
+
+    var root: [HASH_SIZE]u8 = undefined;
+    try tt.final(&root);
+    const encoded = try base32.encode(testing.allocator, &root);
+    defer testing.allocator.free(encoded);
+
+    try testing.expectEqualStrings("3P66KGUMAOGUKVMR5GJE4GOWPRJLLLPZTEUI33Q", encoded);
+}
+
+test "tiger tree - 4096 bytes (exactly 4 blocks)" {
+    var tt = TigerTree.init(testing.allocator, .{});
+    defer tt.deinit();
+
+    const data = [_]u8{0x5A} ** 4096;
+    try tt.update(&data);
+
+    var root: [HASH_SIZE]u8 = undefined;
+    try tt.final(&root);
+
+    // Just verify we can compute it without errors
+    try testing.expect(root.len == 24);
+}
+
+test "tiger tree - large multi-level tree (8KB)" {
+    var tt = TigerTree.init(testing.allocator, .{});
+    defer tt.deinit();
+
+    const data = [_]u8{0x7F} ** 8192;
+    try tt.update(&data);
+
+    var root: [HASH_SIZE]u8 = undefined;
+    try tt.final(&root);
+
+    try testing.expect(root.len == 24);
+}
+
+test "tiger tree - buffer boundary at 1024" {
+    var tt = TigerTree.init(testing.allocator, .{});
+    defer tt.deinit();
+
+    // First chunk: 1023 bytes (one byte short of a block)
+    const chunk1 = [_]u8{0x01} ** 1023;
+    try tt.update(&chunk1);
+
+    // Second chunk: 1 byte (completes the first block)
+    const chunk2 = [_]u8{0x01};
+    try tt.update(&chunk2);
+
+    var root: [HASH_SIZE]u8 = undefined;
+    try tt.final(&root);
+    const encoded = try base32.encode(testing.allocator, &root);
+    defer testing.allocator.free(encoded);
+
+    // This should produce the same result as a single 1024-byte block
+    var tt2 = TigerTree.init(testing.allocator, .{});
+    defer tt2.deinit();
+    const data = [_]u8{0x01} ** 1024;
+    try tt2.update(&data);
+    var root2: [HASH_SIZE]u8 = undefined;
+    try tt2.final(&root2);
+
+    try testing.expectEqualSlices(u8, &root, &root2);
+}
+
+test "tiger tree - single byte" {
+    var tt = TigerTree.init(testing.allocator, .{});
+    defer tt.deinit();
+
+    const data = [_]u8{0xFF};
+    try tt.update(&data);
+
+    var root: [HASH_SIZE]u8 = undefined;
+    try tt.final(&root);
+    const encoded = try base32.encode(testing.allocator, &root);
+    defer testing.allocator.free(encoded);
+
+    try testing.expect(encoded.len == 39);
+}
+
+test "tiger tree - 10000 bytes (varied size)" {
+    var tt = TigerTree.init(testing.allocator, .{});
+    defer tt.deinit();
+
+    const data = [_]u8{0xAB} ** 10000;
+    try tt.update(&data);
+
+    var root: [HASH_SIZE]u8 = undefined;
+    try tt.final(&root);
+
+    try testing.expect(root.len == 24);
+}
+
+test "tiger tree - writer interface" {
+    var tt = TigerTree.init(testing.allocator, .{});
+    defer tt.deinit();
+
+    const w = tt.writer();
+    _ = try w.writeAll("test data");
+
+    var root: [HASH_SIZE]u8 = undefined;
+    try tt.final(&root);
+
+    // Verify same result as direct update
+    var tt2 = TigerTree.init(testing.allocator, .{});
+    defer tt2.deinit();
+    try tt2.update("test data");
+    var root2: [HASH_SIZE]u8 = undefined;
+    try tt2.final(&root2);
+
+    try testing.expectEqualSlices(u8, &root, &root2);
+}
+
+test "tiger tree - writer interface multiple writes" {
+    var tt = TigerTree.init(testing.allocator, .{});
+    defer tt.deinit();
+
+    const w = tt.writer();
+    _ = try w.writeAll("test ");
+    _ = try w.writeAll("data");
+
+    var root: [HASH_SIZE]u8 = undefined;
+    try tt.final(&root);
+
+    // Verify same result as direct update
+    var tt2 = TigerTree.init(testing.allocator, .{});
+    defer tt2.deinit();
+    try tt2.update("test data");
+    var root2: [HASH_SIZE]u8 = undefined;
+    try tt2.final(&root2);
+
+    try testing.expectEqualSlices(u8, &root, &root2);
+}
+
+test "tiger tree - one-shot hash" {
+    var out: [HASH_SIZE]u8 = undefined;
+    try TigerTree.hash(testing.allocator, "test data", &out, .{});
+
+    // Verify same result as streaming
+    var tt = TigerTree.init(testing.allocator, .{});
+    defer tt.deinit();
+    try tt.update("test data");
+    var root: [HASH_SIZE]u8 = undefined;
+    try tt.final(&root);
+
+    try testing.expectEqualSlices(u8, &out, &root);
+}
+
+test "tiger tree - one-shot hash empty" {
+    var out: [HASH_SIZE]u8 = undefined;
+    try TigerTree.hash(testing.allocator, "", &out, .{});
+
+    const encoded = try base32.encode(testing.allocator, &out);
+    defer testing.allocator.free(encoded);
+
+    try testing.expectEqualStrings("LWPNACQDBZRYXW3VHJVCJ64QBZNGHOHHHZWCLNQ", encoded);
+}
+
+test "tiger tree - peek non-destructive" {
+    var tt = TigerTree.init(testing.allocator, .{});
+    defer tt.deinit();
+
+    try tt.update("test data");
+
+    // Peek should not consume the state
+    const peeked = try tt.peek();
+
+    // Should still be able to update and finalize
+    try tt.update(" more");
+    var out: [HASH_SIZE]u8 = undefined;
+    try tt.final(&out);
+
+    // Peeked value should be hash of "test data"
+    var tt2 = TigerTree.init(testing.allocator, .{});
+    defer tt2.deinit();
+    try tt2.update("test data");
+    const expected = try tt2.peek();
+
+    try testing.expectEqualSlices(u8, &peeked, &expected);
+
+    // Final value should be hash of "test data more"
+    var tt3 = TigerTree.init(testing.allocator, .{});
+    defer tt3.deinit();
+    try tt3.update("test data more");
+    var expected2: [HASH_SIZE]u8 = undefined;
+    try tt3.final(&expected2);
+
+    try testing.expectEqualSlices(u8, &out, &expected2);
+}
