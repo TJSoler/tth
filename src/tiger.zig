@@ -304,6 +304,7 @@ pub const Tiger = struct {
     buf_len: u8,
     total_len: u64,
 
+    /// Initialize a new Tiger hash context
     pub fn init(options: Options) Self {
         _ = options;
         return .{
@@ -317,14 +318,14 @@ pub const Tiger = struct {
         };
     }
 
-    /// One-shot hash computation
+    /// Compute Tiger hash in one shot (convenience function)
     pub fn hash(b: []const u8, out: *[digest_length]u8, options: Options) void {
         var d = Self.init(options);
         d.update(b);
         d.final(out);
     }
 
-    /// Non-destructive hash read (copies state before finalizing)
+    /// Read current hash value without consuming state (non-destructive)
     pub fn peek(self: Self) [digest_length]u8 {
         var copy = self;
         var out: [digest_length]u8 = undefined;
@@ -332,7 +333,7 @@ pub const Tiger = struct {
         return out;
     }
 
-    /// Update with data
+    /// Add data to hash computation (can be called multiple times)
     pub fn update(self: *Self, b: []const u8) void {
         var off: usize = 0;
 
@@ -356,7 +357,7 @@ pub const Tiger = struct {
         self.total_len += b.len;
     }
 
-    /// Finalize and write result
+    /// Finalize hash computation and write result to output buffer
     pub fn final(self: *Self, out: *[digest_length]u8) void {
         // Padding: append 0x01, then zeros, then 64-bit length
         self.buf[self.buf_len] = 0x01;
@@ -381,21 +382,6 @@ pub const Tiger = struct {
         std.mem.writeInt(u64, out[0..8], self.state[0], .little);
         std.mem.writeInt(u64, out[8..16], self.state[1], .little);
         std.mem.writeInt(u64, out[16..24], self.state[2], .little);
-    }
-
-    /// Writer error type (never fails)
-    pub const Error = error{};
-
-    /// Writer type for std.io integration
-    pub const Writer = std.io.GenericWriter(*Self, Error, write);
-
-    fn write(self: *Self, bytes: []const u8) Error!usize {
-        self.update(bytes);
-        return bytes.len;
-    }
-
-    pub fn writer(self: *Self) Writer {
-        return .{ .context = self };
     }
 
     /// Compress a 512-bit block into the hash state
@@ -605,46 +591,6 @@ test "tiger - large streaming data" {
     var h2 = Tiger.init(.{});
     const data = "0123456789" ** 100;
     h2.update(data);
-    var out2: [24]u8 = undefined;
-    h2.final(&out2);
-
-    try testing.expectEqualSlices(u8, &out, &out2);
-}
-
-test "tiger - writer interface" {
-    var h = Tiger.init(.{});
-    const w = h.writer();
-
-    // Write using the Writer interface
-    _ = try w.writeAll("abc");
-
-    var out: [24]u8 = undefined;
-    h.final(&out);
-
-    // Verify same result as direct update
-    var h2 = Tiger.init(.{});
-    h2.update("abc");
-    var out2: [24]u8 = undefined;
-    h2.final(&out2);
-
-    try testing.expectEqualSlices(u8, &out, &out2);
-}
-
-test "tiger - writer interface multiple writes" {
-    var h = Tiger.init(.{});
-    const w = h.writer();
-
-    // Multiple writes
-    _ = try w.writeAll("a");
-    _ = try w.writeAll("b");
-    _ = try w.writeAll("c");
-
-    var out: [24]u8 = undefined;
-    h.final(&out);
-
-    // Verify same result as direct update
-    var h2 = Tiger.init(.{});
-    h2.update("abc");
     var out2: [24]u8 = undefined;
     h2.final(&out2);
 
