@@ -22,7 +22,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `Tiger.Options` struct for future API extensibility
 - `TigerTree.hash()` - one-shot TTH computation function
 - `TigerTree.peek()` - non-destructive hash read
-- `TigerTree.writer()` - `std.io.Writer` interface support for streaming
 - `TigerTree.Options` struct for future API extensibility
 - Security warnings in module documentation for Tiger and TigerTree
 - Memory management documentation for TigerTree allocation behavior
@@ -50,7 +49,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - RFC 4648 Base32 encoding/decoding for hash representation
 - High-level API functions: `compute()` and `computeFromFile()`
 - Incremental hashing support via `update()` pattern
-- `std.io.Writer` interface implementation for both Tiger and TigerTree
 - Compile-time hash computation support
 - CLI tool for computing TTH hashes from files
 - Comprehensive test suite with 61+ tests
