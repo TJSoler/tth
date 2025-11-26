@@ -25,8 +25,8 @@ pub fn main() !void {
     const hash = try tth.computeFromFile(allocator, file_path);
 
     // Encode to Base32
-    const encoded = try tth.base32.encode(allocator, &hash);
-    defer allocator.free(encoded);
+    var buf: [39]u8 = undefined;
+    const encoded = tth.base32.standard_no_pad.Encoder.encode(&buf, &hash);
 
     std.debug.print("TTH ({s}): {s}\n", .{ file_path, encoded });
 }
@@ -36,15 +36,15 @@ test "basic TTH functionality" {
 
     // Test empty data
     const empty_hash = try tth.compute(allocator, "");
-    const empty_encoded = try tth.base32.encode(allocator, &empty_hash);
-    defer allocator.free(empty_encoded);
+    var empty_buf: [39]u8 = undefined;
+    const empty_encoded = tth.base32.standard_no_pad.Encoder.encode(&empty_buf, &empty_hash);
 
     try std.testing.expectEqualStrings("LWPNACQDBZRYXW3VHJVCJ64QBZNGHOHHHZWCLNQ", empty_encoded);
 
     // Test simple data
     const data = "abc";
     const hash = try tth.compute(allocator, data);
-    const encoded = try tth.base32.encode(allocator, &hash);
-    defer allocator.free(encoded);
+    var buf: [39]u8 = undefined;
+    const encoded = tth.base32.standard_no_pad.Encoder.encode(&buf, &hash);
     try std.testing.expectEqualStrings("ASD4UJSEH5M47PDYB46KBTSQTSGDKLBHYXOMUIA", encoded);
 }

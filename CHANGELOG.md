@@ -52,7 +52,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Compile-time hash computation support
 - CLI tool for computing TTH hashes from files
 - Comprehensive test suite with 61+ tests
-- Test vectors verified against DC++ and rhash implementations
+- Test vectors verified against rhash implementation
 - MIT license
 - Complete documentation and examples
 

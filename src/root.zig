@@ -1,7 +1,6 @@
 //! TTH (Tiger Tree Hash) library
 //!
-//! This library provides a complete implementation of Tiger Tree Hash (TTH),
-//! commonly used in peer-to-peer file sharing protocols like DC++.
+//! This library provides a complete implementation of Tiger Tree Hash (TTH)
 //!
 //! The implementation includes:
 //! - Pure Zig Tiger hash algorithm
@@ -77,8 +76,8 @@ const testing = std.testing;
 
 test "public API - compute empty data" {
     const hash = try compute(testing.allocator, "");
-    const encoded = try base32.encode(testing.allocator, &hash);
-    defer testing.allocator.free(encoded);
+    var buf: [39]u8 = undefined;
+    const encoded = base32.standard_no_pad.Encoder.encode(&buf, &hash);
 
     try testing.expectEqualStrings("LWPNACQDBZRYXW3VHJVCJ64QBZNGHOHHHZWCLNQ", encoded);
 }
@@ -139,8 +138,8 @@ test "public API - computeFromFile empty file" {
     }
 
     const hash = try computeFromFile(testing.allocator, temp_file_path);
-    const encoded = try base32.encode(testing.allocator, &hash);
-    defer testing.allocator.free(encoded);
+    var buf: [39]u8 = undefined;
+    const encoded = base32.standard_no_pad.Encoder.encode(&buf, &hash);
 
     try testing.expectEqualStrings("LWPNACQDBZRYXW3VHJVCJ64QBZNGHOHHHZWCLNQ", encoded);
 }
@@ -195,15 +194,15 @@ test "public API - TigerTree direct usage" {
 test "public API - full integration with base32" {
     const data = "Integration test data";
     const hash = try compute(testing.allocator, data);
-    const encoded = try base32.encode(testing.allocator, &hash);
-    defer testing.allocator.free(encoded);
+    var encode_buf: [39]u8 = undefined;
+    const encoded = base32.standard_no_pad.Encoder.encode(&encode_buf, &hash);
 
     // Verify encoded length
     try testing.expectEqual(@as(usize, 39), encoded.len);
 
     // Decode and verify round-trip
-    const decoded = try base32.decode(testing.allocator, encoded);
-    defer testing.allocator.free(decoded);
+    var decode_buf: [24]u8 = undefined;
+    try base32.standard_no_pad.Decoder.decode(&decode_buf, encoded);
 
-    try testing.expectEqualSlices(u8, &hash, decoded);
+    try testing.expectEqualSlices(u8, &hash, &decode_buf);
 }
