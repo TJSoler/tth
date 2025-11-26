@@ -7,7 +7,7 @@ A pure Zig implementation of Tiger Tree Hash (TTH)
 - **Pure Zig implementation** - No external C dependencies
 - **Tiger hash algorithm** - 192-bit cryptographic hash optimized for 64-bit platforms
 - **Merkle tree construction** - Following the THEX specification with 1024-byte leaf blocks
-- **RFC 4648 Base32 encoding** - For hash representation compatible with DC++ and other tools
+- **RFC 4648 Base32 encoding** - For standard hash representation
 - **Fully tested** - Includes comprehensive test suite with known test vectors
 
 ## Installation
