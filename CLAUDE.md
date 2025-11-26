@@ -44,12 +44,10 @@ root.zig (Public API)
 ### Entry Points
 
 - **Library users**: Import `src/root.zig` which exports:
-  - `compute(allocator, data)` - High-level TTH computation
-  - `computeFromFile(allocator, path)` - File-based computation
   - `Tiger` - Tiger hash context (incremental hashing)
   - `TigerTree` - Merkle tree builder (incremental processing)
   - `base32` - Encoding/decoding module
-  - Constants: `digest_length` (24), `block_length` (64), `BLOCK_SIZE` (1024)
+  - Constants: `digest_length` (24), `block_length` (64), `leaf_block_size` (1024)
 
 - **CLI users**: `examples/tth.zig` executable
 
@@ -61,23 +59,18 @@ The build.zig creates two outputs:
 
 ### Resource Management
 
-`TigerTree` allocates memory dynamically and **requires explicit cleanup**:
-```zig
-var tree = TigerTree.init(allocator, .{});
-defer tree.deinit();  // REQUIRED - must be called to free memory
-```
-
-`Tiger` does not allocate and requires no cleanup.
+Both `Tiger` and `TigerTree` use fixed-size internal buffers with no heap allocation.
+No cleanup is required - simply let the struct go out of scope.
 
 ### Incremental Processing
 
 Both `Tiger` and `TigerTree` support streaming data via the `update()` pattern:
 ```zig
-var tree = TigerTree.init(allocator, .{});
-try tree.update(chunk1);
-try tree.update(chunk2);
+var tree = TigerTree.init(.{});
+tree.update(chunk1);
+tree.update(chunk2);
 var hash: [24]u8 = undefined;
-try tree.final(&hash);
+tree.final(&hash);
 ```
 
 ### THEX Specification Details
@@ -93,8 +86,8 @@ The Merkle tree implementation follows the THEX (Tree Hash EXchange) specificati
 - **Tiger hash**: 3-pass compression with 4 S-boxes (t1-t4), feed-forward mechanism
 - **Base32**: RFC 4648 alphabet (A-Z, 2-7), no padding for 24-byte inputs
 - **Security**: Tiger hash is NOT cryptographically secure. Use only for file integrity checking.
-- **Error handling**: `TigerTree` can fail due to allocation; `Tiger` never fails
-- **Comptime support**: Hash computations work at compile time
+- **Error handling**: Both `Tiger` and `TigerTree` are infallible (no heap allocation)
+- **Comptime support**: Both `Tiger` and `TigerTree` work at compile time
 
 ### Test Coverage
 
