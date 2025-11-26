@@ -34,141 +34,46 @@ pub const block_length = tiger.block_length;
 /// THEX standard leaf block size for Tiger Tree Hash (1024 bytes)
 pub const leaf_block_size = merkle.leaf_block_size;
 
-/// Compute Tiger Tree Hash for given data. Returns 24-byte hash.
-pub fn compute(allocator: std.mem.Allocator, data: []const u8) ![24]u8 {
-    var tree = TigerTree.init(allocator, .{});
-    defer tree.deinit();
-
-    try tree.update(data);
-    var hash: [24]u8 = undefined;
-    try tree.final(&hash);
-    return hash;
-}
-
-/// Compute Tiger Tree Hash for a file. Returns 24-byte hash.
-pub fn computeFromFile(allocator: std.mem.Allocator, file_path: []const u8) ![24]u8 {
-    const file = try std.fs.cwd().openFile(file_path, .{});
-    defer file.close();
-
-    var tree = TigerTree.init(allocator, .{});
-    defer tree.deinit();
-
-    const buffer_size = 64 * 1024;
-    var buffer = try allocator.alloc(u8, buffer_size);
-    defer allocator.free(buffer);
-
-    while (true) {
-        const bytes_read = try file.read(buffer);
-        if (bytes_read == 0) break;
-        try tree.update(buffer[0..bytes_read]);
-    }
-
-    var hash: [24]u8 = undefined;
-    try tree.final(&hash);
-    return hash;
-}
-
 test {
     std.testing.refAllDecls(@This());
 }
 
 const testing = std.testing;
 
-test "public API - compute empty data" {
-    const hash = try compute(testing.allocator, "");
+test "public API - hash empty data" {
+    var hash: [digest_length]u8 = undefined;
+    TigerTree.hash("", &hash, .{});
     var buf: [39]u8 = undefined;
     const encoded = base32.standard_no_pad.Encoder.encode(&buf, &hash);
 
     try testing.expectEqualStrings("LWPNACQDBZRYXW3VHJVCJ64QBZNGHOHHHZWCLNQ", encoded);
 }
 
-test "public API - compute simple data" {
+test "public API - hash simple data" {
     const data = "Hello, World!";
-    const hash = try compute(testing.allocator, data);
+    var hash: [digest_length]u8 = undefined;
+    TigerTree.hash(data, &hash, .{});
 
     try testing.expect(hash.len == digest_length);
     try testing.expect(hash.len == 24);
 }
 
-test "public API - compute large data" {
+test "public API - hash large data" {
     const data = [_]u8{0xAB} ** 10000;
-    const hash = try compute(testing.allocator, &data);
+    var hash: [digest_length]u8 = undefined;
+    TigerTree.hash(&data, &hash, .{});
 
     try testing.expect(hash.len == digest_length);
 }
 
-test "public API - compute consistency" {
+test "public API - hash consistency" {
     const data = "Test data for consistency check";
-    const hash1 = try compute(testing.allocator, data);
-    const hash2 = try compute(testing.allocator, data);
+    var hash1: [digest_length]u8 = undefined;
+    var hash2: [digest_length]u8 = undefined;
+    TigerTree.hash(data, &hash1, .{});
+    TigerTree.hash(data, &hash2, .{});
 
     try testing.expectEqualSlices(u8, &hash1, &hash2);
-}
-
-test "public API - computeFromFile with temp file" {
-    // Create a temporary file
-    const test_data = "This is test data for file hashing";
-    const temp_file_path = "test_temp_file.txt";
-
-    const file = try std.fs.cwd().createFile(temp_file_path, .{});
-    defer {
-        file.close();
-        std.fs.cwd().deleteFile(temp_file_path) catch {};
-    }
-
-    try file.writeAll(test_data);
-    try file.sync();
-
-    // Compute hash from file
-    const hash_from_file = try computeFromFile(testing.allocator, temp_file_path);
-
-    // Compute hash from data directly
-    const hash_from_data = try compute(testing.allocator, test_data);
-
-    try testing.expectEqualSlices(u8, &hash_from_file, &hash_from_data);
-}
-
-test "public API - computeFromFile empty file" {
-    const temp_file_path = "test_empty_file.txt";
-
-    const file = try std.fs.cwd().createFile(temp_file_path, .{});
-    defer {
-        file.close();
-        std.fs.cwd().deleteFile(temp_file_path) catch {};
-    }
-
-    const hash = try computeFromFile(testing.allocator, temp_file_path);
-    var buf: [39]u8 = undefined;
-    const encoded = base32.standard_no_pad.Encoder.encode(&buf, &hash);
-
-    try testing.expectEqualStrings("LWPNACQDBZRYXW3VHJVCJ64QBZNGHOHHHZWCLNQ", encoded);
-}
-
-test "public API - computeFromFile large file" {
-    const temp_file_path = "test_large_file.bin";
-
-    const file = try std.fs.cwd().createFile(temp_file_path, .{});
-    defer {
-        file.close();
-        std.fs.cwd().deleteFile(temp_file_path) catch {};
-    }
-
-    // Write 100KB of data
-    const chunk = [_]u8{0x42} ** 1024;
-    var i: usize = 0;
-    while (i < 100) : (i += 1) {
-        try file.writeAll(&chunk);
-    }
-    try file.sync();
-
-    const hash = try computeFromFile(testing.allocator, temp_file_path);
-
-    try testing.expect(hash.len == digest_length);
-}
-
-test "public API - error on non-existent file" {
-    const result = computeFromFile(testing.allocator, "non_existent_file_xyz.txt");
-    try testing.expectError(error.FileNotFound, result);
 }
 
 test "public API - Tiger direct usage" {
@@ -181,19 +86,19 @@ test "public API - Tiger direct usage" {
 }
 
 test "public API - TigerTree direct usage" {
-    var tree = TigerTree.init(testing.allocator, .{});
-    defer tree.deinit();
+    var tree = TigerTree.init(.{});
 
-    try tree.update("test data");
+    tree.update("test data");
     var hash: [24]u8 = undefined;
-    try tree.final(&hash);
+    tree.final(&hash);
 
     try testing.expect(hash.len == digest_length);
 }
 
 test "public API - full integration with base32" {
     const data = "Integration test data";
-    const hash = try compute(testing.allocator, data);
+    var hash: [digest_length]u8 = undefined;
+    TigerTree.hash(data, &hash, .{});
     var encode_buf: [39]u8 = undefined;
     const encoded = base32.standard_no_pad.Encoder.encode(&encode_buf, &hash);
 

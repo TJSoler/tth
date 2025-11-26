@@ -8,11 +8,6 @@
 //! cryptographically secure for modern security-critical applications.
 //! Use only for file integrity checking in contexts where cryptographic
 //! security against sophisticated attackers is not required.
-//!
-//! **MEMORY MANAGEMENT**: TigerTree requires dynamic memory allocation for the
-//! tree structure. You must call `deinit()` when done to avoid memory leaks.
-//! The tree grows logarithmically with file size, allocating approximately
-//! O(log N) nodes for N blocks of data.
 
 const std = @import("std");
 const Tiger = @import("tiger.zig").Tiger;
@@ -22,6 +17,9 @@ pub const leaf_block_size = 1024;
 
 /// Tiger hash output size (192 bits / 24 bytes)
 const hash_size = 24;
+
+/// Maximum stack depth for tree building (supports files up to 2^64 bytes)
+const max_stack_depth = 64;
 
 /// Tree node representing either a leaf hash or internal node
 const Block = struct {
@@ -36,18 +34,18 @@ pub const TigerTree = struct {
     /// Initialization options (empty for now, for future extensibility)
     pub const Options = struct {};
 
-    allocator: std.mem.Allocator,
-    blocks: std.ArrayList(Block), // Stack of partial tree nodes
+    blocks: [max_stack_depth]Block,
+    block_count: usize,
     buffer: [leaf_block_size]u8,
     buffer_len: usize,
     total_size: u64,
 
-    /// Initialize a new TigerTree context. Must call deinit() when done.
-    pub fn init(allocator: std.mem.Allocator, options: Options) Self {
+    /// Initialize a new TigerTree context
+    pub fn init(options: Options) Self {
         _ = options;
         return .{
-            .allocator = allocator,
-            .blocks = std.ArrayList(Block){},
+            .blocks = undefined,
+            .block_count = 0,
             .buffer = undefined,
             .buffer_len = 0,
             .total_size = 0,
@@ -55,20 +53,14 @@ pub const TigerTree = struct {
     }
 
     /// Compute Tiger Tree Hash in one shot (convenience function)
-    pub fn hash(allocator: std.mem.Allocator, data: []const u8, out: *[hash_size]u8, options: Options) !void {
-        var d = Self.init(allocator, options);
-        defer d.deinit();
-        try d.update(data);
-        try d.final(out);
-    }
-
-    /// Free allocated memory. Must be called to avoid memory leaks.
-    pub fn deinit(self: *Self) void {
-        self.blocks.deinit(self.allocator);
+    pub fn hash(data: []const u8, out: *[hash_size]u8, options: Options) void {
+        var d = Self.init(options);
+        d.update(data);
+        d.final(out);
     }
 
     /// Add data to tree hash computation (can be called multiple times)
-    pub fn update(self: *Self, data: []const u8) !void {
+    pub fn update(self: *Self, data: []const u8) void {
         var remaining = data;
 
         while (remaining.len > 0) {
@@ -80,7 +72,7 @@ pub const TigerTree = struct {
             remaining = remaining[to_copy..];
 
             if (self.buffer_len == leaf_block_size) {
-                try self.processBlock(self.buffer[0..leaf_block_size]);
+                self.processBlock(self.buffer[0..leaf_block_size]);
                 self.buffer_len = 0;
             }
         }
@@ -89,52 +81,35 @@ pub const TigerTree = struct {
     }
 
     /// Finalize tree construction and write root hash to output buffer
-    pub fn final(self: *Self, out: *[hash_size]u8) !void {
+    pub fn final(self: *Self, out: *[hash_size]u8) void {
         // Process any remaining buffered data
         // Note: also process for empty file case
         if (self.buffer_len > 0 or self.total_size == 0) {
-            try self.processBlock(self.buffer[0..self.buffer_len]);
+            self.processBlock(self.buffer[0..self.buffer_len]);
         }
 
-        // Merge all remaining blocks
-        while (self.blocks.items.len > 1) {
-            const right = self.blocks.pop() orelse unreachable; // len > 1, so pop() cannot fail
-            var left = &self.blocks.items[self.blocks.items.len - 1];
+        // Merge all remaining blocks until single root
+        while (self.block_count > 1) {
+            self.block_count -= 1;
+            const right = self.blocks[self.block_count];
+            var left = &self.blocks[self.block_count - 1];
             left.hash = combineHashes(&left.hash, &right.hash);
             left.size += right.size;
         }
 
-        if (self.blocks.items.len == 0) {
-            return error.NoBlocks;
-        }
-
-        out.* = self.blocks.items[0].hash;
+        out.* = self.blocks[0].hash;
     }
 
     /// Read current root hash without consuming state (non-destructive)
-    pub fn peek(self: Self) ![hash_size]u8 {
-        var copy = try self.clone();
-        defer copy.deinit();
+    pub fn peek(self: Self) [hash_size]u8 {
+        var copy = self; // Simple struct copy
         var out: [hash_size]u8 = undefined;
-        try copy.final(&out);
+        copy.final(&out);
         return out;
     }
 
-    /// Clone the current state for non-destructive operations
-    fn clone(self: Self) !Self {
-        var copy = Self{
-            .allocator = self.allocator,
-            .blocks = std.ArrayList(Block){},
-            .buffer = self.buffer,
-            .buffer_len = self.buffer_len,
-            .total_size = self.total_size,
-        };
-        try copy.blocks.appendSlice(self.allocator, self.blocks.items);
-        return copy;
-    }
-
     /// Process a complete block (leaf hash)
-    fn processBlock(self: *Self, data: []const u8) !void {
+    fn processBlock(self: *Self, data: []const u8) void {
         var leaf_hash: [hash_size]u8 = undefined;
 
         // Leaf hash: H(0x00 || data)
@@ -143,28 +118,28 @@ pub const TigerTree = struct {
         h.update(data);
         h.final(&leaf_hash);
 
-        try self.blocks.append(self.allocator, .{
+        self.blocks[self.block_count] = .{
             .hash = leaf_hash,
             .size = data.len,
-        });
+        };
+        self.block_count += 1;
 
-        try self.reduceBlocks();
+        self.reduceBlocks();
     }
 
     /// Merge adjacent blocks of equal size
-    fn reduceBlocks(self: *Self) !void {
-        while (self.blocks.items.len >= 2) {
-            const len = self.blocks.items.len;
-            const right = &self.blocks.items[len - 1];
-            const left = &self.blocks.items[len - 2];
+    fn reduceBlocks(self: *Self) void {
+        while (self.block_count >= 2) {
+            const right = &self.blocks[self.block_count - 1];
+            const left = &self.blocks[self.block_count - 2];
 
             // Only merge blocks of equal size
             if (left.size != right.size) break;
 
             const right_copy = right.*;
-            _ = self.blocks.pop();
+            self.block_count -= 1;
 
-            var merged = &self.blocks.items[len - 2];
+            var merged = &self.blocks[self.block_count - 1];
             merged.hash = combineHashes(&left.hash, &right_copy.hash);
             merged.size = left.size + right_copy.size;
         }
@@ -189,11 +164,10 @@ const testing = std.testing;
 const base32 = @import("base32.zig");
 
 test "tiger tree - empty file" {
-    var tt = TigerTree.init(testing.allocator, .{});
-    defer tt.deinit();
+    var tt = TigerTree.init(.{});
 
     var root: [hash_size]u8 = undefined;
-    try tt.final(&root);
+    tt.final(&root);
     var buf: [39]u8 = undefined;
     const encoded = base32.standard_no_pad.Encoder.encode(&buf, &root);
 
@@ -201,14 +175,13 @@ test "tiger tree - empty file" {
 }
 
 test "tiger tree - 1024 A's" {
-    var tt = TigerTree.init(testing.allocator, .{});
-    defer tt.deinit();
+    var tt = TigerTree.init(.{});
 
     const data = [_]u8{'A'} ** 1024;
-    try tt.update(&data);
+    tt.update(&data);
 
     var root: [hash_size]u8 = undefined;
-    try tt.final(&root);
+    tt.final(&root);
     var buf: [39]u8 = undefined;
     const encoded = base32.standard_no_pad.Encoder.encode(&buf, &root);
 
@@ -216,14 +189,13 @@ test "tiger tree - 1024 A's" {
 }
 
 test "tiger tree - 1025 A's" {
-    var tt = TigerTree.init(testing.allocator, .{});
-    defer tt.deinit();
+    var tt = TigerTree.init(.{});
 
     const data = [_]u8{'A'} ** 1025;
-    try tt.update(&data);
+    tt.update(&data);
 
     var root: [hash_size]u8 = undefined;
-    try tt.final(&root);
+    tt.final(&root);
     var buf: [39]u8 = undefined;
     const encoded = base32.standard_no_pad.Encoder.encode(&buf, &root);
 
@@ -231,38 +203,35 @@ test "tiger tree - 1025 A's" {
 }
 
 test "tiger tree - streaming incremental updates" {
-    var tt1 = TigerTree.init(testing.allocator, .{});
-    defer tt1.deinit();
-    var tt2 = TigerTree.init(testing.allocator, .{});
-    defer tt2.deinit();
+    var tt1 = TigerTree.init(.{});
+    var tt2 = TigerTree.init(.{});
 
     // One call
     const data = "test data for streaming";
-    try tt1.update(data);
+    tt1.update(data);
 
     // Multiple calls
-    try tt2.update("test ");
-    try tt2.update("data ");
-    try tt2.update("for ");
-    try tt2.update("streaming");
+    tt2.update("test ");
+    tt2.update("data ");
+    tt2.update("for ");
+    tt2.update("streaming");
 
     var root1: [hash_size]u8 = undefined;
     var root2: [hash_size]u8 = undefined;
-    try tt1.final(&root1);
-    try tt2.final(&root2);
+    tt1.final(&root1);
+    tt2.final(&root2);
 
     try testing.expectEqualSlices(u8, &root1, &root2);
 }
 
 test "tiger tree - 2048 bytes (exactly 2 blocks)" {
-    var tt = TigerTree.init(testing.allocator, .{});
-    defer tt.deinit();
+    var tt = TigerTree.init(.{});
 
     const data = [_]u8{0x42} ** 2048;
-    try tt.update(&data);
+    tt.update(&data);
 
     var root: [hash_size]u8 = undefined;
-    try tt.final(&root);
+    tt.final(&root);
     var buf: [39]u8 = undefined;
     const encoded = base32.standard_no_pad.Encoder.encode(&buf, &root);
 
@@ -270,14 +239,13 @@ test "tiger tree - 2048 bytes (exactly 2 blocks)" {
 }
 
 test "tiger tree - 2049 bytes (3 blocks, triggers internal node)" {
-    var tt = TigerTree.init(testing.allocator, .{});
-    defer tt.deinit();
+    var tt = TigerTree.init(.{});
 
     const data = [_]u8{0x42} ** 2049;
-    try tt.update(&data);
+    tt.update(&data);
 
     var root: [hash_size]u8 = undefined;
-    try tt.final(&root);
+    tt.final(&root);
     var buf: [39]u8 = undefined;
     const encoded = base32.standard_no_pad.Encoder.encode(&buf, &root);
 
@@ -285,67 +253,62 @@ test "tiger tree - 2049 bytes (3 blocks, triggers internal node)" {
 }
 
 test "tiger tree - 4096 bytes (exactly 4 blocks)" {
-    var tt = TigerTree.init(testing.allocator, .{});
-    defer tt.deinit();
+    var tt = TigerTree.init(.{});
 
     const data = [_]u8{0x5A} ** 4096;
-    try tt.update(&data);
+    tt.update(&data);
 
     var root: [hash_size]u8 = undefined;
-    try tt.final(&root);
+    tt.final(&root);
 
     // Just verify we can compute it without errors
     try testing.expect(root.len == 24);
 }
 
 test "tiger tree - large multi-level tree (8KB)" {
-    var tt = TigerTree.init(testing.allocator, .{});
-    defer tt.deinit();
+    var tt = TigerTree.init(.{});
 
     const data = [_]u8{0x7F} ** 8192;
-    try tt.update(&data);
+    tt.update(&data);
 
     var root: [hash_size]u8 = undefined;
-    try tt.final(&root);
+    tt.final(&root);
 
     try testing.expect(root.len == 24);
 }
 
 test "tiger tree - buffer boundary at 1024" {
-    var tt = TigerTree.init(testing.allocator, .{});
-    defer tt.deinit();
+    var tt = TigerTree.init(.{});
 
     // First chunk: 1023 bytes (one byte short of a block)
     const chunk1 = [_]u8{0x01} ** 1023;
-    try tt.update(&chunk1);
+    tt.update(&chunk1);
 
     // Second chunk: 1 byte (completes the first block)
     const chunk2 = [_]u8{0x01};
-    try tt.update(&chunk2);
+    tt.update(&chunk2);
 
     var root: [hash_size]u8 = undefined;
-    try tt.final(&root);
+    tt.final(&root);
 
     // This should produce the same result as a single 1024-byte block
-    var tt2 = TigerTree.init(testing.allocator, .{});
-    defer tt2.deinit();
+    var tt2 = TigerTree.init(.{});
     const data = [_]u8{0x01} ** 1024;
-    try tt2.update(&data);
+    tt2.update(&data);
     var root2: [hash_size]u8 = undefined;
-    try tt2.final(&root2);
+    tt2.final(&root2);
 
     try testing.expectEqualSlices(u8, &root, &root2);
 }
 
 test "tiger tree - single byte" {
-    var tt = TigerTree.init(testing.allocator, .{});
-    defer tt.deinit();
+    var tt = TigerTree.init(.{});
 
     const data = [_]u8{0xFF};
-    try tt.update(&data);
+    tt.update(&data);
 
     var root: [hash_size]u8 = undefined;
-    try tt.final(&root);
+    tt.final(&root);
     var buf: [39]u8 = undefined;
     const encoded = base32.standard_no_pad.Encoder.encode(&buf, &root);
 
@@ -353,35 +316,33 @@ test "tiger tree - single byte" {
 }
 
 test "tiger tree - 10000 bytes (varied size)" {
-    var tt = TigerTree.init(testing.allocator, .{});
-    defer tt.deinit();
+    var tt = TigerTree.init(.{});
 
     const data = [_]u8{0xAB} ** 10000;
-    try tt.update(&data);
+    tt.update(&data);
 
     var root: [hash_size]u8 = undefined;
-    try tt.final(&root);
+    tt.final(&root);
 
     try testing.expect(root.len == 24);
 }
 
 test "tiger tree - one-shot hash" {
     var out: [hash_size]u8 = undefined;
-    try TigerTree.hash(testing.allocator, "test data", &out, .{});
+    TigerTree.hash("test data", &out, .{});
 
     // Verify same result as streaming
-    var tt = TigerTree.init(testing.allocator, .{});
-    defer tt.deinit();
-    try tt.update("test data");
+    var tt = TigerTree.init(.{});
+    tt.update("test data");
     var root: [hash_size]u8 = undefined;
-    try tt.final(&root);
+    tt.final(&root);
 
     try testing.expectEqualSlices(u8, &out, &root);
 }
 
 test "tiger tree - one-shot hash empty" {
     var out: [hash_size]u8 = undefined;
-    try TigerTree.hash(testing.allocator, "", &out, .{});
+    TigerTree.hash("", &out, .{});
 
     var buf: [39]u8 = undefined;
     const encoded = base32.standard_no_pad.Encoder.encode(&buf, &out);
@@ -390,39 +351,49 @@ test "tiger tree - one-shot hash empty" {
 }
 
 test "tiger tree - peek non-destructive" {
-    var tt = TigerTree.init(testing.allocator, .{});
-    defer tt.deinit();
+    var tt = TigerTree.init(.{});
 
-    try tt.update("test data");
+    tt.update("test data");
 
     // Peek should not consume the state
-    const peeked = try tt.peek();
+    const peeked = tt.peek();
 
     // Should still be able to update and finalize
-    try tt.update(" more");
+    tt.update(" more");
     var out: [hash_size]u8 = undefined;
-    try tt.final(&out);
+    tt.final(&out);
 
     // Peeked value should be hash of "test data"
-    var tt2 = TigerTree.init(testing.allocator, .{});
-    defer tt2.deinit();
-    try tt2.update("test data");
-    const expected = try tt2.peek();
+    var tt2 = TigerTree.init(.{});
+    tt2.update("test data");
+    const expected = tt2.peek();
 
     try testing.expectEqualSlices(u8, &peeked, &expected);
 
     // Final value should be hash of "test data more"
-    var tt3 = TigerTree.init(testing.allocator, .{});
-    defer tt3.deinit();
-    try tt3.update("test data more");
+    var tt3 = TigerTree.init(.{});
+    tt3.update("test data more");
     var expected2: [hash_size]u8 = undefined;
-    try tt3.final(&expected2);
+    tt3.final(&expected2);
 
     try testing.expectEqualSlices(u8, &out, &expected2);
 }
 
-// Note: TigerTree comptime test is not possible because ArrayList
-// requires runtime memory allocation via std.mem.Allocator, which
-// cannot be used at compile time. The underlying Tiger hash supports
-// comptime computation (see tiger.zig tests), but the tree structure
-// with dynamic memory allocation does not.
+test "tiger tree - comptime hash" {
+    comptime {
+        var tt = TigerTree.init(.{});
+        tt.update("abc");
+        var out: [hash_size]u8 = undefined;
+        tt.final(&out);
+
+        // Verify expected hash for "abc" (matches Base32: ASD4UJSEH5M47PDYB46KBTSQTSGDKLBHYXOMUIA)
+        const expected = [_]u8{
+            0x04, 0x87, 0xca, 0x26, 0x44, 0x3f, 0x59, 0xcf,
+            0xbc, 0x78, 0x0f, 0x3c, 0xa0, 0xce, 0x50, 0x9c,
+            0x8c, 0x35, 0x2c, 0x27, 0xc5, 0xdc, 0xca, 0x20,
+        };
+        for (out, expected) |a, b| {
+            if (a != b) @compileError("Comptime TigerTree hash mismatch");
+        }
+    }
+}

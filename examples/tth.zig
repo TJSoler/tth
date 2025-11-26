@@ -21,8 +21,22 @@ pub fn main() !void {
 
     const file_path = args[1];
 
-    // Compute TTH
-    const hash = try tth.computeFromFile(allocator, file_path);
+    // Open file
+    const file = try std.fs.cwd().openFile(file_path, .{});
+    defer file.close();
+
+    // Compute TTH using streaming
+    var tree = tth.TigerTree.init(.{});
+    var buffer: [64 * 1024]u8 = undefined;
+
+    while (true) {
+        const bytes_read = try file.read(&buffer);
+        if (bytes_read == 0) break;
+        tree.update(buffer[0..bytes_read]);
+    }
+
+    var hash: [tth.digest_length]u8 = undefined;
+    tree.final(&hash);
 
     // Encode to Base32
     var buf: [39]u8 = undefined;
@@ -32,10 +46,9 @@ pub fn main() !void {
 }
 
 test "basic TTH functionality" {
-    const allocator = std.testing.allocator;
-
     // Test empty data
-    const empty_hash = try tth.compute(allocator, "");
+    var empty_hash: [tth.digest_length]u8 = undefined;
+    tth.TigerTree.hash("", &empty_hash, .{});
     var empty_buf: [39]u8 = undefined;
     const empty_encoded = tth.base32.standard_no_pad.Encoder.encode(&empty_buf, &empty_hash);
 
@@ -43,7 +56,8 @@ test "basic TTH functionality" {
 
     // Test simple data
     const data = "abc";
-    const hash = try tth.compute(allocator, data);
+    var hash: [tth.digest_length]u8 = undefined;
+    tth.TigerTree.hash(data, &hash, .{});
     var buf: [39]u8 = undefined;
     const encoded = tth.base32.standard_no_pad.Encoder.encode(&buf, &hash);
     try std.testing.expectEqualStrings("ASD4UJSEH5M47PDYB46KBTSQTSGDKLBHYXOMUIA", encoded);
