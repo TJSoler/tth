@@ -307,7 +307,13 @@ pub fn main() !void {
     std.debug.print("Tiger Hash Benchmarks:\n", .{});
     std.debug.print("{s}\n", .{"-" ** 80});
 
-    const num_tiger = main_samples.items[0].value.tiger.len;
+    // Use minimum length to handle format transitions between benchmark versions
+    const main_tiger_len = main_samples.items[0].value.tiger.len;
+    const pr_tiger_len = pr_samples.items[0].value.tiger.len;
+    const num_tiger = @min(main_tiger_len, pr_tiger_len);
+    if (main_tiger_len != pr_tiger_len) {
+        std.debug.print("  Note: Different benchmark sizes (main={d}, pr={d}), comparing {d} common entries\n\n", .{ main_tiger_len, pr_tiger_len, num_tiger });
+    }
     var bench_idx: usize = 0;
     while (bench_idx < num_tiger) : (bench_idx += 1) {
         // Collect all samples for this benchmark
@@ -379,7 +385,13 @@ pub fn main() !void {
     std.debug.print("TigerTree Hash Benchmarks:\n", .{});
     std.debug.print("{s}\n", .{"-" ** 80});
 
-    const num_tree = main_samples.items[0].value.tiger_tree.len;
+    // Use minimum length to handle format transitions between benchmark versions
+    const main_tree_len = main_samples.items[0].value.tiger_tree.len;
+    const pr_tree_len = pr_samples.items[0].value.tiger_tree.len;
+    const num_tree = @min(main_tree_len, pr_tree_len);
+    if (main_tree_len != pr_tree_len) {
+        std.debug.print("  Note: Different benchmark sizes (main={d}, pr={d}), comparing {d} common entries\n\n", .{ main_tree_len, pr_tree_len, num_tree });
+    }
     bench_idx = 0;
     while (bench_idx < num_tree) : (bench_idx += 1) {
         var main_values = std.ArrayList(f64){};

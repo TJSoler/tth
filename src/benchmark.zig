@@ -33,11 +33,30 @@ const hashes = [_]Crypto{
     .{ .ty = tth.TigerTree, .name = "tigertree" },
 };
 
+/// Test sizes for benchmark comparison (must match compare_benchmarks.zig expectations)
+const TestSize = struct {
+    bytes: usize,
+    name: []const u8,
+};
+
+const test_sizes = [_]TestSize{
+    .{ .bytes = mode(64 * KiB), .name = "64 KiB" },
+    .{ .bytes = mode(1 * MiB), .name = "1 MiB" },
+    .{ .bytes = mode(8 * MiB), .name = "8 MiB" },
+    .{ .bytes = mode(128 * MiB), .name = "128 MiB" },
+};
+
 const block_size: usize = 8192;
 
-/// Benchmark hash throughput
-pub fn benchmarkHash(comptime Hash: anytype, comptime bytes: comptime_int) !u64 {
-    const blocks_count = bytes / block_size;
+/// Benchmark result for a single test size
+const BenchResult = struct {
+    name: []const u8,
+    size_bytes: usize,
+    throughput: u64,
+};
+
+/// Benchmark hash throughput at runtime with variable size
+fn benchmarkHashRuntime(comptime Hash: anytype, bytes: usize) !u64 {
     var block: [block_size]u8 = undefined;
 
     var prng = std.Random.DefaultPrng.init(42);
@@ -48,7 +67,8 @@ pub fn benchmarkHash(comptime Hash: anytype, comptime bytes: comptime_int) !u64 
     var timer = try Timer.start();
     const start = timer.lap();
 
-    for (0..blocks_count) |_| {
+    var remaining = bytes;
+    while (remaining >= block_size) : (remaining -= block_size) {
         h.update(&block);
     }
 
@@ -59,7 +79,8 @@ pub fn benchmarkHash(comptime Hash: anytype, comptime bytes: comptime_int) !u64 
     const end = timer.read();
 
     const elapsed_s = @as(f64, @floatFromInt(end - start)) / time.ns_per_s;
-    const throughput = @as(u64, @intFromFloat(bytes / elapsed_s));
+    if (elapsed_s == 0) return 0;
+    const throughput = @as(u64, @intFromFloat(@as(f64, @floatFromInt(bytes)) / elapsed_s));
 
     return throughput;
 }
@@ -139,25 +160,45 @@ pub fn main() !void {
         try stdout.print("Build mode: {s}\n\n", .{@tagName(builtin.mode)});
     }
 
-    // Collect results for JSON output
-    var tiger_throughput: u64 = 0;
-    var tigertree_throughput: u64 = 0;
+    // Collect results for JSON output (multiple sizes per hash type)
+    var tiger_results: [test_sizes.len]BenchResult = [_]BenchResult{.{ .name = "", .size_bytes = 0, .throughput = 0 }} ** test_sizes.len;
+    var tigertree_results: [test_sizes.len]BenchResult = [_]BenchResult{.{ .name = "", .size_bytes = 0, .throughput = 0 }} ** test_sizes.len;
     var encode_ops: u64 = 0;
     var decode_ops: u64 = 0;
 
-    // Hash benchmarks
-    inline for (hashes) |H| {
-        if (filter == null or mem.indexOf(u8, H.name, filter.?) != null) {
-            const throughput = try benchmarkHash(H.ty, mode(128 * MiB));
-
-            if (mem.eql(u8, H.name, "tiger")) {
-                tiger_throughput = throughput;
-            } else if (mem.eql(u8, H.name, "tigertree")) {
-                tigertree_throughput = throughput;
-            }
-
+    // Hash benchmarks for each test size
+    const tiger_filter_match = filter == null or mem.indexOf(u8, "tiger", filter.?) != null;
+    if (tiger_filter_match) {
+        if (output_format == .human) {
+            try stdout.print("Tiger Hash:\n", .{});
+        }
+        for (test_sizes, 0..) |size, idx| {
+            const throughput = try benchmarkHashRuntime(tth.Tiger, size.bytes);
+            tiger_results[idx] = .{
+                .name = size.name,
+                .size_bytes = size.bytes,
+                .throughput = throughput,
+            };
             if (output_format == .human) {
-                try stdout.print("{s:>12}: {:10} MiB/s\n", .{ H.name, throughput / MiB });
+                try stdout.print("  {s:>10}: {:10} MiB/s\n", .{ size.name, throughput / MiB });
+            }
+        }
+    }
+
+    const tigertree_filter_match = filter == null or mem.indexOf(u8, "tigertree", filter.?) != null;
+    if (tigertree_filter_match) {
+        if (output_format == .human) {
+            try stdout.print("TigerTree Hash:\n", .{});
+        }
+        for (test_sizes, 0..) |size, idx| {
+            const throughput = try benchmarkHashRuntime(tth.TigerTree, size.bytes);
+            tigertree_results[idx] = .{
+                .name = size.name,
+                .size_bytes = size.bytes,
+                .throughput = throughput,
+            };
+            if (output_format == .human) {
+                try stdout.print("  {s:>10}: {:10} MiB/s\n", .{ size.name, throughput / MiB });
             }
         }
     }
@@ -177,18 +218,39 @@ pub fn main() !void {
     if (output_format == .human) {
         try stdout.print("\n", .{});
     } else {
-        // JSON output for CI comparison
+        // JSON output for CI comparison (multiple sizes per hash type)
         try stdout.print("{{\n", .{});
-        try stdout.print("  \"tiger\": [{{\n", .{});
-        try stdout.print("    \"name\": \"128 MiB\",\n", .{});
-        try stdout.print("    \"size_bytes\": {d},\n", .{mode(128 * MiB)});
-        try stdout.print("    \"throughput_bytes_per_sec\": {d}\n", .{tiger_throughput});
-        try stdout.print("  }}],\n", .{});
-        try stdout.print("  \"tiger_tree\": [{{\n", .{});
-        try stdout.print("    \"name\": \"128 MiB\",\n", .{});
-        try stdout.print("    \"size_bytes\": {d},\n", .{mode(128 * MiB)});
-        try stdout.print("    \"throughput_bytes_per_sec\": {d}\n", .{tigertree_throughput});
-        try stdout.print("  }}],\n", .{});
+
+        // Tiger results array
+        try stdout.print("  \"tiger\": [\n", .{});
+        for (tiger_results, 0..) |result, idx| {
+            try stdout.print("    {{\n", .{});
+            try stdout.print("      \"name\": \"{s}\",\n", .{result.name});
+            try stdout.print("      \"size_bytes\": {d},\n", .{result.size_bytes});
+            try stdout.print("      \"throughput_bytes_per_sec\": {d}\n", .{result.throughput});
+            if (idx < tiger_results.len - 1) {
+                try stdout.print("    }},\n", .{});
+            } else {
+                try stdout.print("    }}\n", .{});
+            }
+        }
+        try stdout.print("  ],\n", .{});
+
+        // TigerTree results array
+        try stdout.print("  \"tiger_tree\": [\n", .{});
+        for (tigertree_results, 0..) |result, idx| {
+            try stdout.print("    {{\n", .{});
+            try stdout.print("      \"name\": \"{s}\",\n", .{result.name});
+            try stdout.print("      \"size_bytes\": {d},\n", .{result.size_bytes});
+            try stdout.print("      \"throughput_bytes_per_sec\": {d}\n", .{result.throughput});
+            if (idx < tigertree_results.len - 1) {
+                try stdout.print("    }},\n", .{});
+            } else {
+                try stdout.print("    }}\n", .{});
+            }
+        }
+        try stdout.print("  ],\n", .{});
+
         try stdout.print("  \"base32_encode_ops\": {d},\n", .{encode_ops});
         try stdout.print("  \"base32_decode_ops\": {d}\n", .{decode_ops});
         try stdout.print("}}\n", .{});
