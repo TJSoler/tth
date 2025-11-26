@@ -118,6 +118,7 @@ pub const TigerTree = struct {
         h.update(data);
         h.final(&leaf_hash);
 
+        std.debug.assert(self.block_count < max_stack_depth);
         self.blocks[self.block_count] = .{
             .hash = leaf_hash,
             .size = data.len,
