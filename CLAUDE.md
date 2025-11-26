@@ -92,13 +92,13 @@ The Merkle tree implementation follows the THEX (Tree Hash EXchange) specificati
 
 - **Tiger hash**: 3-pass compression with 4 S-boxes (t1-t4), feed-forward mechanism
 - **Base32**: RFC 4648 alphabet (A-Z, 2-7), no padding for 24-byte inputs
-- **Security**: Tiger hash is NOT cryptographically secure. Use only for P2P file integrity checking.
+- **Security**: Tiger hash is NOT cryptographically secure. Use only for file integrity checking.
 - **Error handling**: `TigerTree` can fail due to allocation; `Tiger` never fails
 - **Comptime support**: Hash computations work at compile time
 
 ### Test Coverage
 
-61+ tests across all modules with known test vectors verified against DC++ and rhash outputs. Tests use only standard library - no external testing frameworks.
+61+ tests across all modules with known test vectors verified against rhash outputs. Tests use only standard library - no external testing frameworks.
 
 ## Zig Standard Library Conventions
 

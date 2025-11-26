@@ -194,8 +194,8 @@ test "tiger tree - empty file" {
 
     var root: [hash_size]u8 = undefined;
     try tt.final(&root);
-    const encoded = try base32.encode(testing.allocator, &root);
-    defer testing.allocator.free(encoded);
+    var buf: [39]u8 = undefined;
+    const encoded = base32.standard_no_pad.Encoder.encode(&buf, &root);
 
     try testing.expectEqualStrings("LWPNACQDBZRYXW3VHJVCJ64QBZNGHOHHHZWCLNQ", encoded);
 }
@@ -209,8 +209,8 @@ test "tiger tree - 1024 A's" {
 
     var root: [hash_size]u8 = undefined;
     try tt.final(&root);
-    const encoded = try base32.encode(testing.allocator, &root);
-    defer testing.allocator.free(encoded);
+    var buf: [39]u8 = undefined;
+    const encoded = base32.standard_no_pad.Encoder.encode(&buf, &root);
 
     try testing.expectEqualStrings("L66Q4YVNAFWVS23X2HJIRA5ZJ7WXR3F26RSASFA", encoded);
 }
@@ -224,8 +224,8 @@ test "tiger tree - 1025 A's" {
 
     var root: [hash_size]u8 = undefined;
     try tt.final(&root);
-    const encoded = try base32.encode(testing.allocator, &root);
-    defer testing.allocator.free(encoded);
+    var buf: [39]u8 = undefined;
+    const encoded = base32.standard_no_pad.Encoder.encode(&buf, &root);
 
     try testing.expectEqualStrings("PZMRYHGY6LTBEH63ZWAHDORHSYTLO4LEFUIKHWY", encoded);
 }
@@ -263,8 +263,8 @@ test "tiger tree - 2048 bytes (exactly 2 blocks)" {
 
     var root: [hash_size]u8 = undefined;
     try tt.final(&root);
-    const encoded = try base32.encode(testing.allocator, &root);
-    defer testing.allocator.free(encoded);
+    var buf: [39]u8 = undefined;
+    const encoded = base32.standard_no_pad.Encoder.encode(&buf, &root);
 
     try testing.expectEqualStrings("4GIQEVNYCTEFRJLADAPEDVUDKZQUIE2A6BKOJQI", encoded);
 }
@@ -278,8 +278,8 @@ test "tiger tree - 2049 bytes (3 blocks, triggers internal node)" {
 
     var root: [hash_size]u8 = undefined;
     try tt.final(&root);
-    const encoded = try base32.encode(testing.allocator, &root);
-    defer testing.allocator.free(encoded);
+    var buf: [39]u8 = undefined;
+    const encoded = base32.standard_no_pad.Encoder.encode(&buf, &root);
 
     try testing.expectEqualStrings("3P66KGUMAOGUKVMR5GJE4GOWPRJLLLPZTEUI33Q", encoded);
 }
@@ -325,8 +325,6 @@ test "tiger tree - buffer boundary at 1024" {
 
     var root: [hash_size]u8 = undefined;
     try tt.final(&root);
-    const encoded = try base32.encode(testing.allocator, &root);
-    defer testing.allocator.free(encoded);
 
     // This should produce the same result as a single 1024-byte block
     var tt2 = TigerTree.init(testing.allocator, .{});
@@ -348,8 +346,8 @@ test "tiger tree - single byte" {
 
     var root: [hash_size]u8 = undefined;
     try tt.final(&root);
-    const encoded = try base32.encode(testing.allocator, &root);
-    defer testing.allocator.free(encoded);
+    var buf: [39]u8 = undefined;
+    const encoded = base32.standard_no_pad.Encoder.encode(&buf, &root);
 
     try testing.expect(encoded.len == 39);
 }
@@ -385,8 +383,8 @@ test "tiger tree - one-shot hash empty" {
     var out: [hash_size]u8 = undefined;
     try TigerTree.hash(testing.allocator, "", &out, .{});
 
-    const encoded = try base32.encode(testing.allocator, &out);
-    defer testing.allocator.free(encoded);
+    var buf: [39]u8 = undefined;
+    const encoded = base32.standard_no_pad.Encoder.encode(&buf, &out);
 
     try testing.expectEqualStrings("LWPNACQDBZRYXW3VHJVCJ64QBZNGHOHHHZWCLNQ", encoded);
 }
