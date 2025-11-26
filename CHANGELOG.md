@@ -24,20 +24,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `TigerTree.peek()` - non-destructive hash read
 - `TigerTree.Options` struct for future API extensibility
 - Security warnings in module documentation for Tiger and TigerTree
-- Memory management documentation for TigerTree allocation behavior
 - RFC 4648 test vectors for Base32 implementation
 - Additional test coverage across all modules (10+ new tests)
+- Comptime test for TigerTree (hash computation at compile time)
 
 ### Changed
 
 - **BREAKING**: Renamed `BLOCK_SIZE` to `leaf_block_size` (snake_case consistency with Zig stdlib)
 - **BREAKING**: Renamed `TigerTree.finalize()` to `TigerTree.final()` (consistency with Zig crypto stdlib)
 - **BREAKING**: `Tiger.init()` now requires `Options` parameter (use `.{}` for defaults)
-- **BREAKING**: `TigerTree.init()` now requires `Options` parameter (use `.{}` for defaults)
+- **BREAKING**: `TigerTree.init()` no longer requires an allocator parameter (zero heap allocation)
+- **BREAKING**: `TigerTree.hash()` no longer requires an allocator parameter
 - **BREAKING**: `TigerTree.final()` now takes output parameter instead of returning value
+- **BREAKING**: `TigerTree` methods are now infallible (no allocation errors)
+- **BREAKING**: `TigerTree.peek()` now returns `[24]u8` instead of `![24]u8`
 - Made `tiger` and `merkle` modules private to reduce API surface area (public types `tth.Tiger` and `tth.TigerTree` remain available)
+- `TigerTree` now uses fixed-size internal stack (~3KB) instead of dynamic allocation
 - Improved buffer handling in `Tiger.update()` for better performance
 - GitHub repository URLs in README examples (corrected from `tth/tth` to `tjsoler/tth`)
+
+### Removed
+
+- **BREAKING**: `TigerTree.deinit()` - no longer needed (no heap allocation)
+- **BREAKING**: `compute()` - use `TigerTree.hash()` directly
+- **BREAKING**: `computeFromFile()` - users handle file I/O directly
 
 ## [0.1.0] - 2025-11-21
 

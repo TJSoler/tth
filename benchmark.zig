@@ -69,7 +69,7 @@ fn printOpsPerSec(ops_per_sec: u64) void {
 }
 
 /// Benchmark Tiger hash at a specific size
-fn benchmarkTiger(allocator: std.mem.Allocator, bytes: usize) !u64 {
+fn benchmarkTiger(bytes: usize) !u64 {
     const blocks_count = bytes / Config.block_size;
     var block: [Config.block_size]u8 = undefined;
 
@@ -104,12 +104,11 @@ fn benchmarkTiger(allocator: std.mem.Allocator, bytes: usize) !u64 {
         total_throughput += throughput;
     }
 
-    _ = allocator;
     return total_throughput / Config.num_runs;
 }
 
 /// Benchmark TigerTree hash at a specific size
-fn benchmarkTigerTree(allocator: std.mem.Allocator, bytes: usize) !u64 {
+fn benchmarkTigerTree(bytes: usize) !u64 {
     const blocks_count = bytes / Config.block_size;
     var block: [Config.block_size]u8 = undefined;
 
@@ -123,23 +122,18 @@ fn benchmarkTigerTree(allocator: std.mem.Allocator, bytes: usize) !u64 {
     // Average across multiple runs
     var run: usize = 0;
     while (run < Config.num_runs) : (run += 1) {
-        // Arena allocator for benchmark
-        var arena = std.heap.ArenaAllocator.init(allocator);
-        defer arena.deinit();
-        const arena_allocator = arena.allocator();
-
-        var tree = tth.TigerTree.init(arena_allocator, .{});
+        var tree = tth.TigerTree.init(.{});
 
         var timer = try Timer.start();
         const start = timer.lap();
 
         var i: usize = 0;
         while (i < blocks_count) : (i += 1) {
-            try tree.update(&block);
+            tree.update(&block);
         }
 
         var final: [24]u8 = undefined;
-        try tree.final(&final);
+        tree.final(&final);
         std.mem.doNotOptimizeAway(final);
 
         const end = timer.read();
@@ -153,7 +147,7 @@ fn benchmarkTigerTree(allocator: std.mem.Allocator, bytes: usize) !u64 {
 }
 
 /// Benchmark Base32 encoding
-fn benchmarkBase32Encode(allocator: std.mem.Allocator) !u64 {
+fn benchmarkBase32Encode() !u64 {
     const data = [_]u8{0x42} ** 24; // TTH hash size
 
     var total_ops: u64 = 0;
@@ -161,17 +155,13 @@ fn benchmarkBase32Encode(allocator: std.mem.Allocator) !u64 {
     // Average across multiple runs
     var run: usize = 0;
     while (run < Config.num_runs) : (run += 1) {
-        // Arena allocator for benchmark
-        var arena = std.heap.ArenaAllocator.init(allocator);
-        defer arena.deinit();
-        const arena_allocator = arena.allocator();
-
         var timer = try Timer.start();
         const start = timer.lap();
 
         var i: usize = 0;
         while (i < Config.encode_iterations) : (i += 1) {
-            const encoded = try tth.base32.encode(arena_allocator, &data);
+            var buf: [39]u8 = undefined; // 24 bytes -> 39 base32 chars
+            const encoded = tth.base32.standard_no_pad.Encoder.encode(&buf, &data);
             std.mem.doNotOptimizeAway(encoded);
         }
 
@@ -186,7 +176,7 @@ fn benchmarkBase32Encode(allocator: std.mem.Allocator) !u64 {
 }
 
 /// Benchmark Base32 decoding
-fn benchmarkBase32Decode(allocator: std.mem.Allocator) !u64 {
+fn benchmarkBase32Decode() !u64 {
     const encoded = "LWPNACQDBZRYXW3VHJVCJ64QBZNGHOHHHZWCLNQ"; // 39 chars
 
     var total_ops: u64 = 0;
@@ -194,18 +184,14 @@ fn benchmarkBase32Decode(allocator: std.mem.Allocator) !u64 {
     // Average across multiple runs
     var run: usize = 0;
     while (run < Config.num_runs) : (run += 1) {
-        // Arena allocator for benchmark
-        var arena = std.heap.ArenaAllocator.init(allocator);
-        defer arena.deinit();
-        const arena_allocator = arena.allocator();
-
         var timer = try Timer.start();
         const start = timer.lap();
 
         var i: usize = 0;
         while (i < Config.encode_iterations) : (i += 1) {
-            const decoded = try tth.base32.decode(arena_allocator, encoded);
-            std.mem.doNotOptimizeAway(decoded);
+            var buf: [24]u8 = undefined; // 39 base32 chars -> 24 bytes
+            tth.base32.standard_no_pad.Decoder.decode(&buf, encoded) catch unreachable;
+            std.mem.doNotOptimizeAway(buf);
         }
 
         const end = timer.read();
@@ -270,7 +256,7 @@ pub fn main() !void {
     var tiger_results = std.ArrayList(ThroughputResult){};
 
     for (tiger_sizes) |size| {
-        const throughput = try benchmarkTiger(allocator, size.size);
+        const throughput = try benchmarkTiger(size.size);
         try tiger_results.append(allocator, .{
             .name = size.name,
             .size_bytes = size.size,
@@ -301,7 +287,7 @@ pub fn main() !void {
     var tree_results = std.ArrayList(ThroughputResult){};
 
     for (tree_sizes) |size| {
-        const throughput = try benchmarkTigerTree(allocator, size.size);
+        const throughput = try benchmarkTigerTree(size.size);
         try tree_results.append(allocator, .{
             .name = size.name,
             .size_bytes = size.size,
@@ -321,8 +307,8 @@ pub fn main() !void {
         std.debug.print("-------------------\n", .{});
     }
 
-    const encode_ops = try benchmarkBase32Encode(allocator);
-    const decode_ops = try benchmarkBase32Decode(allocator);
+    const encode_ops = try benchmarkBase32Encode();
+    const decode_ops = try benchmarkBase32Decode();
 
     if (output_format == .human) {
         std.debug.print("  Encode: ", .{});
