@@ -1,27 +1,18 @@
-//! tiger.zig - Pure Zig implementation of Tiger hash algorithm
+//! Tiger hash algorithm implementation
 //!
-//! Tiger is a cryptographic hash function designed for 64-bit platforms,
-//! producing a 192-bit (24-byte) hash value.
+//! Tiger is a cryptographic hash function designed by Ross Anderson and Eli Biham
+//! for 64-bit platforms, producing a 192-bit (24-byte) hash value.
 //!
-//! **SECURITY WARNING**: The Tiger hash function is not considered
-//! cryptographically secure for modern applications. It should not be used
-//! for digital signatures, password hashing, or other security-critical
-//! purposes where collision resistance against targeted attacks is required.
+//! **SECURITY WARNING**: Tiger is not considered cryptographically secure for
+//! modern applications. Do not use for digital signatures, password hashing, or
+//! security-critical purposes. For secure hashing, use SHA-256, SHA-512, or BLAKE3.
 //!
-//! Tiger is suitable for file integrity checking where performance is
-//! important and cryptographic security against sophisticated attackers
-//! is not a primary concern.
+//! Tiger is suitable only for file integrity checking where performance matters
+//! and cryptographic security is not required.
 //!
-//! Based on the Tiger hash specification by Ross Anderson and Eli Biham.
 //! Reference: https://www.cl.cam.ac.uk/~rja14/Papers/tiger.pdf
 
 const std = @import("std");
-
-/// Tiger hash output size (192 bits)
-pub const digest_length = 24;
-
-/// Tiger block size (512 bits)
-pub const block_length = 64;
 
 /// Substitution tables from Tiger specification
 const t1: [256]u64 = .{
@@ -295,6 +286,12 @@ const t4: [256]u64 = .{
 /// Tiger hash context for incremental hashing
 pub const Tiger = struct {
     const Self = @This();
+
+    /// Tiger hash output size (192 bits)
+    pub const digest_length = 24;
+
+    /// Tiger hash block size (512 bits)
+    pub const block_length = 64;
 
     /// Initialization options (empty for now, for future extensibility)
     pub const Options = struct {};
@@ -655,7 +652,7 @@ test "tiger - comptime hash" {
     comptime {
         var h = Tiger.init(.{});
         h.update("abc");
-        var out: [digest_length]u8 = undefined;
+        var out: [Tiger.digest_length]u8 = undefined;
         h.final(&out);
 
         // Verify we can compute hash at comptime
@@ -667,7 +664,7 @@ test "tiger - comptime hash" {
 
 test "tiger - comptime one-shot" {
     comptime {
-        var out: [digest_length]u8 = undefined;
+        var out: [Tiger.digest_length]u8 = undefined;
         Tiger.hash("test", &out, .{});
 
         // Verify hash was computed (check first byte is non-zero)

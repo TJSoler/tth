@@ -24,6 +24,11 @@ zig test src/base32.zig
 zig build -Doptimize=ReleaseFast    # Speed
 zig build -Doptimize=ReleaseSmall   # Size
 zig build -Doptimize=Debug          # Default
+
+# Run benchmarks
+zig build bench -Doptimize=ReleaseFast
+zig build bench -Doptimize=ReleaseFast -- --filter tiger
+zig build bench -Doptimize=ReleaseFast -- --json
 ```
 
 ## Architecture Overview
@@ -53,9 +58,10 @@ root.zig (Public API)
 
 ### Build System
 
-The build.zig creates two outputs:
+The build.zig creates:
 1. **Module** `tth` - Library for use by other projects (root: `src/root.zig`)
 2. **Executable** `tth` - CLI tool (root: `examples/tth.zig`)
+3. **Benchmark** `bench` - Performance measurement (root: `src/benchmark.zig`)
 
 ### Resource Management
 

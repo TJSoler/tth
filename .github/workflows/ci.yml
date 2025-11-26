@@ -94,15 +94,27 @@ jobs:
           for i in 1 2 3 4 5; do
             echo "=== Iteration $i ==="
 
-            # Run main branch
+            # Run main branch (detect old vs new benchmark system)
             echo "Running main branch..."
             cd main-branch
-            zig run -O ReleaseFast benchmark.zig -- --output json 2> ../main_${i}.json
+            if [ -f "benchmark.zig" ]; then
+              # Old benchmark system: zig run at root
+              zig run -O ReleaseFast benchmark.zig -- --output json 2> ../main_${i}.json
+            else
+              # New benchmark system: zig build bench
+              zig build bench -Doptimize=ReleaseFast -- --json > ../main_${i}.json
+            fi
             cd ..
 
-            # Run PR branch
+            # Run PR branch (detect old vs new benchmark system)
             echo "Running PR branch..."
-            zig run -O ReleaseFast benchmark.zig -- --output json 2> pr_${i}.json
+            if [ -f "benchmark.zig" ]; then
+              # Old benchmark system: zig run at root
+              zig run -O ReleaseFast benchmark.zig -- --output json 2> pr_${i}.json
+            else
+              # New benchmark system: zig build bench
+              zig build bench -Doptimize=ReleaseFast -- --json > pr_${i}.json
+            fi
           done
 
           echo "All benchmark runs complete."

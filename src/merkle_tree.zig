@@ -1,22 +1,23 @@
-//! merkle_tree.zig - Merkle tree for Tiger Tree Hash (TTH)
+//! TigerTree - Merkle tree for Tiger Tree Hash (TTH)
 //!
-//! Based on THEX specification.
-//! Uses incremental tree building with 1024-byte leaf blocks.
+//! Implements the THEX (Tree Hash EXchange) specification using Tiger hash
+//! for leaf and internal node computation with 1024-byte leaf blocks.
 //!
-//! **SECURITY WARNING**: Tiger Tree Hash inherits the security properties
-//! of the underlying Tiger hash function. It is not considered
-//! cryptographically secure for modern security-critical applications.
-//! Use only for file integrity checking in contexts where cryptographic
-//! security against sophisticated attackers is not required.
+//! **SECURITY WARNING**: Tiger Tree Hash inherits the security properties of
+//! Tiger hash. Not cryptographically secure for modern security applications.
+//! Use only for file integrity checking where cryptographic security is not required.
+//!
+//! Reference: http://adc.sourceforge.net/draft-jchapweske-thex-02.html
 
 const std = @import("std");
-const Tiger = @import("tiger.zig").Tiger;
+const tiger = @import("tiger.zig");
+const Tiger = tiger.Tiger;
 
 /// THEX standard leaf block size (1024 bytes)
 pub const leaf_block_size = 1024;
 
 /// Tiger hash output size (192 bits / 24 bytes)
-const hash_size = 24;
+const hash_size = Tiger.digest_length;
 
 /// Maximum stack depth for tree building (supports files up to 2^64 bytes)
 const max_stack_depth = 64;
@@ -30,6 +31,9 @@ const Block = struct {
 /// Tiger Tree Hash builder using THEX specification
 pub const TigerTree = struct {
     const Self = @This();
+
+    /// TigerTree output size (same as Tiger: 192 bits)
+    pub const digest_length = hash_size;
 
     /// Initialization options (empty for now, for future extensibility)
     pub const Options = struct {};
