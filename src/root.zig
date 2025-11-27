@@ -1,37 +1,30 @@
-//! TTH (Tiger Tree Hash) library
+//! TTH (Tiger Tree Hash) - Pure Zig implementation
 //!
-//! This library provides a complete implementation of Tiger Tree Hash (TTH)
+//! Provides Tiger hash, Tiger Tree Hash (THEX Merkle tree), and Base32 encoding.
 //!
-//! The implementation includes:
-//! - Pure Zig Tiger hash algorithm
-//! - Merkle tree construction following the THEX specification
-//! - RFC 4648 Base32 encoding/decoding for hash representation
+//! **SECURITY WARNING**: Tiger hash is not cryptographically secure.
+//! Use only for file integrity checking, not security-critical applications.
 
 const std = @import("std");
-
-/// TTH library version
-pub const version = "0.1.0";
-
-/// Tiger hash algorithm implementation
 const tiger = @import("tiger.zig");
-
-/// Tiger Tree Hash (TTH) using Merkle tree
 const merkle = @import("merkle_tree.zig");
 
-/// Base32 encoding/decoding (RFC 4648) for TTH hashes
+/// Base32 encoding/decoding per RFC 4648
 pub const base32 = @import("base32.zig");
 
-/// Re-export commonly used types for convenience
+/// Tiger hash algorithm
 pub const Tiger = tiger.Tiger;
+
+/// Tiger Tree Hash using THEX Merkle tree
 pub const TigerTree = merkle.TigerTree;
 
-/// Tiger hash digest length (24 bytes / 192 bits)
-pub const digest_length = tiger.digest_length;
+/// Tiger hash output size (192 bits)
+pub const digest_length = Tiger.digest_length;
 
-/// Tiger hash block size (64 bytes / 512 bits)
-pub const block_length = tiger.block_length;
+/// Tiger hash block size (512 bits)
+pub const block_length = Tiger.block_length;
 
-/// THEX standard leaf block size for Tiger Tree Hash (1024 bytes)
+/// THEX leaf block size
 pub const leaf_block_size = merkle.leaf_block_size;
 
 test {
